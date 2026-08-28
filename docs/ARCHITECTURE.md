@@ -1,7 +1,7 @@
 # MarginMind Architecture
 
-**Milestone:** 0 — Architecture and repository foundation  
-**Status:** Proposed. Not implemented.  
+**Milestone:** 7 — Deterministic Policy Engine + approval requirements  
+**Status:** M0–M7 implemented. Proposal is not permission.  
 **Authoritative product spec:** [MarginMind — Product & Build Specification.md](./MarginMind%20—%20Product%20%26%20Build%20Specification.md)
 
 This document describes a **5-day Buildathon architecture**. It optimises for a reliable live demo of the locked MVP, not for a production multi-service platform.
@@ -219,25 +219,44 @@ Inputs: intent, hard/soft preferences, session signals, catalogue candidates, cu
 
 Separate module. Pure validation over **database-backed** commercial context.
 
+**Proposal ≠ permission.** The Growth Decision Engine may emit a `ProposedAction`. Only `validate_action` decides whether that action is allowed. The Policy Engine never proposes, never executes checkout, never mutates baskets, never applies offers, and never trusts GDE-supplied totals.
+
 ```
-validate_action(action, context) -> PolicyDecision
+validate_action(db, session, proposal) -> PolicyDecision   # PDEC-001
 ```
 
-Checks for MVP:
+Closed overall verdicts:
 
-- Product/variant exists and is the approved SKU
-- Inventory / size / quantity
-- Hard customer budget
-- Margin floor
-- Offer exists, active, eligible, not stacked unless allowed
-- Campaign active
-- Restricted SKUs
-- Max upsells / session
-- Autonomy level for this action type
-- Customer approval present for commercial-plan changes
-- Only real inventory; only authorised offers
+| Verdict | `allowed` | Meaning |
+| --- | --- | --- |
+| `PASS` | true | Allowed to show or, if already granted for this exact version, allowed in principle |
+| `BLOCK` | false | Commercial truth failed. Must not execute |
+| `APPROVAL_REQUIRED` | true | Allowed in principle, but must not execute until the customer approves this action + exact basket version |
 
-Returns per-check PASS/FAIL plus overall `allowed` / `requires_approval` / `reason`.
+Per-check status is `PASS` / `FAIL` / `N/A`. Any commercial `FAIL` → overall `BLOCK`. A missing customer approval is not a commercial fail: overall `APPROVAL_REQUIRED`.
+
+Checks (always recorded):
+
+`HARD_BUDGET` · `INVENTORY` · `SKU_EXISTS` · `PRODUCT_ACTIVE` · `VARIANT_ACTIVE` · `MARGIN` · `AUTHORIZED_OFFER` · `OFFER_ACTIVE` · `OFFER_ELIGIBILITY` · `OFFER_STACKING` · `MERCHANT_RESTRICTIONS` · `CUSTOMER_APPROVAL_REQUIRED` · `NO_SILENT_BASKET_CHANGE`
+
+Seeded merchant policies (`POL-001`–`POL-008`) are interpreted from typed fields, not description text. HARD budget and real inventory are fail-closed even if a row is missing.
+
+Action-specific behaviour:
+
+| Action | Typical verdict | Notes |
+| --- | --- | --- |
+| `GUIDE_CONFIDENCE` | PASS | No financial checks; no approval to show guidance |
+| `SIMPLIFY_CHOICES` / `RECOMMEND` / `FIND_ALTERNATIVE` | PASS if SKUs real | Showing is not replacing |
+| `NO_UPSELL` / `STOP` | PASS | Not blocked because revenue is skipped |
+| `BUILD_BASKET` / `REBUILD_BASKET` | APPROVAL_REQUIRED if valid | Recalculate `sum(effective_price * qty)` vs HARD budget |
+| `APPLY_AUTHORIZED_OFFER` | APPROVAL_REQUIRED if valid, else BLOCK | Unknown/inactive/ineligible/stacking/margin/discount → BLOCK. Never substitute another offer |
+| `REQUEST_CHECKOUT` | APPROVAL_REQUIRED until exact-version grant | Does not execute checkout |
+
+**HARD budget:** for any action that would create/change a basket, if shopper budget is HARD, resulting total must be `<=` budget. Totals are recomputed from catalogue `effective_price`. Example: GDE candidates `SKU-004-M` + `SKU-007-M` + `SKU-012-OS` = ₹2,647 vs HARD ₹2,500 → `BLOCK` / `HARD_BUDGET_VIOLATION`.
+
+**Margin:** `cost = price * (1 - margin_percent/100)`. After discount, `margin = (discounted - cost) / discounted * 100`. Floor is `max(POL-006, offer.min_margin_percent)` when an offer applies. Below floor → `MARGIN_FLOOR_VIOLATION`. OFR-001 at 10% on trousers (`SKU-004-M`, 35% seeded margin) falls to ~27.8% and is blocked.
+
+**Offers:** an M6 offer candidate is only a suggestion. Policy independently verifies `OFR-` existence, merchant ownership, active window, basket minimum, eligible SKU/category, `POL-007` max discount, margin floor, and `POL-008` stacking. Unknown offer → BLOCK. No silent substitution.
 
 The LLM cannot override this object.
 
@@ -245,7 +264,7 @@ Autonomy (spec §24):
 
 | Level | Examples |
 | --- | --- |
-| AUTO | Rank, explain fit, simplify to 3, comparison copy |
+| AUTO | Rank, explain fit, simplify to 3, comparison copy (`GUIDE_CONFIDENCE`, `SIMPLIFY_CHOICES`, `NO_UPSELL`, `STOP`) |
 | APPROVAL_REQUIRED | Replace basket item, apply offer, change basket, request checkout |
 | NEVER AUTONOMOUS | Invent discount, override hard budget, change policy, charge, silent basket mutation, invent SKU, override margin |
 
@@ -264,7 +283,7 @@ Source of product truth.
 
 Seeded synthetic catalogue is acceptable and expected for the demo.
 
-### 6.7 Basket / approval (`backend/app/layers/basket/`)
+### 6.7 Basket / approval (`backend/app/layers/basket/`, `backend/app/layers/approval/`)
 
 - Basket is **versioned** (`BASK-001@v1`). Material changes copy-on-write to a new version; prior versions stay reconstructable.
 - Line prices are catalogue effective prices (override or base). Callers cannot supply the authoritative price.
@@ -272,7 +291,7 @@ Seeded synthetic catalogue is acceptable and expected for the demo.
 - `build_complete_looks` scores structured metadata only (occasion/fit/style/colour + composition). No AI ranking, no discounts.
 - `evaluate_optional_add_on` is the NO_UPSELL foundation (`HARD_BUDGET_VIOLATION`). It does not run the Growth Decision Engine.
 - `propose_replacement` evaluates a swap without mutating the basket.
-- Approval later binds to one exact version. Never silently mutate an approved snapshot.
+- Approval (`APR-001`) binds to **session + action + exact basket row/version**. Granting approval does not execute. `BASK-001@v1` never authorizes `BASK-001@v2`. A rebuild/replacement requires a new approval.
 
 ### 6.7.1 Conversion friction (`backend/app/layers/friction/`)
 
@@ -337,7 +356,7 @@ Customer message
     → Session signals            (frontend events: size guide, views, rejects)
     → Friction diagnosis         (rules first; AI may add confidence/copy)
     → Proposed bounded action    (Growth Decision Engine)
-    → Policy validation          (deterministic; PASS / BLOCK / APPROVAL)
+    → Policy validation          (deterministic; PASS / BLOCK / APPROVAL_REQUIRED)
     → Customer approval          (exact basket version)
     → Inventory/price/offer revalidation
     → Razorpay checkout          (only if revalidation PASS)
@@ -394,11 +413,12 @@ Only `VERIFIED` counts as a commercial success for metrics.
 | `intents` | `INT-001` | Structured session intent later |
 | `baskets` | `BASK-001` + `version` | Unique `(ref_id, version)` → `BASK-001@v2` |
 | `basket_items` | (line UUID) | Variant + qty + `unit_price_snapshot` |
-| `approvals` | `APR-001` | Binds customer to a basket version |
+| `approvals` | `APR-001` | Exact session + action + basket version. Grant ≠ execute |
 | `evidence` | `EVD-001` | Evidence packs |
 | `audit_events` | `AUD-001` | Append-only trace |
 | `friction_diagnoses` | `FRIC-001` | Rule-first friction + evidence refs (M5) |
 | `agent_actions` | `ACT-001` | Proposed bounded actions (M6). Not authorization. |
+| `policy_decisions` | `PDEC-001` | Policy Engine verdict + typed checks (M7). Not execution. |
 
 **Deferred:** `growth_opportunities`, `checkout_attempts`, `payments`, `webhook_events`, `campaigns`, `experiments`, `experiment_assignments`, `demand_clusters`.
 
@@ -433,6 +453,7 @@ Traces, eval scenarios, and merchant UI should display `ref_id`, not UUIDs.
 | Friction diagnosis | `FRIC-001` |
 | Audit event | `AUD-001` |
 | Agent action | `ACT-001` |
+| Policy decision | `PDEC-001` |
 
 Assign these in seed data and in application code when rows are created. Do not regenerate a `ref_id` after insert. Eval fixtures and the farewell demo session should use the same ID scheme so a judge can follow `SES-001` → `EVD-001` → `ACT-001` → `BASK-001@v2` on the trace page.
 
@@ -450,7 +471,7 @@ Assign these in seed data and in application code when rows are created. Do not 
 
 ### Policy verdict
 
-`PASS` · `BLOCK` · `REQUIRE_APPROVAL`
+`PASS` · `BLOCK` · `APPROVAL_REQUIRED`
 
 These live in `backend/app/schemas/vocabulary.py` so frontend, engine, eval, and audit share one contract.
 
@@ -478,10 +499,11 @@ MarginMind/
       schemas/               ← Pydantic + shared vocabulary
       engines/
         growth_decision/     ← M6 proposes; does not authorize
-        policy/
+        policy/              ← M7 validates; does not execute
       layers/
         catalogue/
         basket/
+        approval/            ← exact-version grant/reject; no execution
         friction/
         evidence/
         payments/

@@ -212,30 +212,25 @@ Deterministic friction → bounded `ProposedAction` (`ACT-…`), WHAT/WHY/FIX, r
 
 ## M7 — Policy Engine
 
-**Goal:** Code decides whether the proposal is allowed.
+**Status:** complete.
 
-**In scope**
+Deterministic `validate_action` over database-backed commercial truth. Closed verdicts `PASS` / `BLOCK` / `APPROVAL_REQUIRED`. Proposal is not permission. Approvals bind to exact basket versions (`BASK-001@v1` never covers `@v2`). Granting approval does not execute. No Gemini, no Razorpay, no frontend, no checkout execution.
 
-- `validate_action(action, context)` with MVP checks in `ARCHITECTURE.md` §6.5.
-- Autonomy levels per action type.
-- Structured per-check results.
-- Merchant policy rows drive thresholds (margin, max discount, stacking, approval required).
+**Out of scope (held)**
 
-**Out of scope**
-
-- UI for Policy Studio (read API can wait until M12; engine must work now).
+- Execution after approval, revalidation-before-pay, Policy Studio UI.
 
 **Test**
 
-- Offer proposed but margin fail → BLOCK.
-- Hard budget fail → BLOCK / force `NO_UPSELL`.
-- `APPLY_AUTHORIZED_OFFER` with unknown offer id → BLOCK.
-- `RECOMMEND` in-stock in-budget → PASS, AUTO.
-- `REQUEST_CHECKOUT` without approval → REQUIRE_APPROVAL or BLOCK.
+- Hero fit → `GUIDE_CONFIDENCE` → PASS, no approval, no basket mutation.
+- Hero `NO_UPSELL` → PASS; forgone revenue recorded; budget protected.
+- Valid rebuild → `APPROVAL_REQUIRED`; over-budget GDE lie → `HARD_BUDGET_VIOLATION` BLOCK.
+- Unknown/inactive/expired offer, margin floor, discount max, stacking, basket minimum → BLOCK.
+- Stale v1 approval does not authorize v2.
 
 **Commit**
 
-- Policy engine + tests.
+- Policy engine + approval service + tests.
 
 ---
 
@@ -462,6 +457,6 @@ Deterministic friction → bounded `ProposedAction` (`ACT-…`), WHAT/WHY/FIX, r
 
 ## Proposed next milestone after approval
 
-**M7 — Policy Engine.**
+**M8 — Evidence store and append-only audit.**
 
-Deterministic `validate_action` over database-backed commercial context. Do not start M7 without approval.
+Running M4–M7 should produce a reconstructable Agent Trace (intent, signals, friction, proposal, policy checks, approval required?). Do not start M8 without approval.

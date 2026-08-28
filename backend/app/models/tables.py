@@ -215,6 +215,7 @@ class ShoppingSession(Base):
         back_populates="session"
     )
     agent_actions: Mapped[list[AgentAction]] = relationship(back_populates="session")
+    policy_decisions: Mapped[list[PolicyDecision]] = relationship(back_populates="session")
 
 
 class SessionEvent(Base):
@@ -305,6 +306,8 @@ class Approval(Base):
     basket_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("baskets.id"), index=True)
     customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id"), index=True)
     basket_version: Mapped[int] = mapped_column(Integer)
+    action_ref_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending")
     snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -373,6 +376,25 @@ class AgentAction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     session: Mapped[ShoppingSession] = relationship(back_populates="agent_actions")
+
+
+class PolicyDecision(Base):
+    __tablename__ = "policy_decisions"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    ref_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("shopping_sessions.id"), index=True)
+    action_ref_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    decision: Mapped[str] = mapped_column(String(32), index=True)
+    allowed: Mapped[bool] = mapped_column(Boolean, default=False)
+    requires_customer_approval: Mapped[bool] = mapped_column(Boolean, default=False)
+    requires_merchant_approval: Mapped[bool] = mapped_column(Boolean, default=False)
+    reason_codes: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    checks: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    evidence_ref_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    validated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    session: Mapped[ShoppingSession] = relationship(back_populates="policy_decisions")
 
 
 class AuditEvent(Base):

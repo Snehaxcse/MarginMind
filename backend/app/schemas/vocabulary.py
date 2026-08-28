@@ -58,7 +58,35 @@ class AutonomyLevel(str, Enum):
 class PolicyVerdict(str, Enum):
     PASS = "PASS"
     BLOCK = "BLOCK"
-    REQUIRE_APPROVAL = "REQUIRE_APPROVAL"
+    APPROVAL_REQUIRED = "APPROVAL_REQUIRED"
+
+
+class PolicyCheckName(str, Enum):
+    HARD_BUDGET = "HARD_BUDGET"
+    INVENTORY = "INVENTORY"
+    SKU_EXISTS = "SKU_EXISTS"
+    PRODUCT_ACTIVE = "PRODUCT_ACTIVE"
+    VARIANT_ACTIVE = "VARIANT_ACTIVE"
+    MARGIN = "MARGIN"
+    AUTHORIZED_OFFER = "AUTHORIZED_OFFER"
+    OFFER_ACTIVE = "OFFER_ACTIVE"
+    OFFER_ELIGIBILITY = "OFFER_ELIGIBILITY"
+    OFFER_STACKING = "OFFER_STACKING"
+    MERCHANT_RESTRICTIONS = "MERCHANT_RESTRICTIONS"
+    CUSTOMER_APPROVAL_REQUIRED = "CUSTOMER_APPROVAL_REQUIRED"
+    NO_SILENT_BASKET_CHANGE = "NO_SILENT_BASKET_CHANGE"
+
+
+class CheckStatus(str, Enum):
+    PASS = "PASS"
+    FAIL = "FAIL"
+    NA = "N/A"
+
+
+class ApprovalStatus(str, Enum):
+    PENDING = "pending"
+    GRANTED = "granted"
+    REJECTED = "rejected"
 
 
 class ConstraintKind(str, Enum):
@@ -103,6 +131,7 @@ class EvidenceKind(str, Enum):
     BASKET_SNAPSHOT = "basket_snapshot"
     INVENTORY_SNAPSHOT = "inventory_snapshot"
     FRICTION_EVALUATION = "friction_evaluation"
+    POLICY_DECISION = "policy_decision"
 
 
 class PolicyCode(str, Enum):
