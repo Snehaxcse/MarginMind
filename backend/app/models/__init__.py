@@ -1,0 +1,39 @@
+"""SQLAlchemy ORM models. Commercial truth lives in the database, not in the LLM."""
+
+from app.models.tables import (
+    Approval,
+    AuditEvent,
+    Basket,
+    BasketItem,
+    Customer,
+    CustomerPreference,
+    Evidence,
+    Intent,
+    Inventory,
+    Merchant,
+    MerchantPolicy,
+    Offer,
+    Product,
+    ProductVariant,
+    SessionEvent,
+    ShoppingSession,
+)
+
+__all__ = [
+    "Approval",
+    "AuditEvent",
+    "Basket",
+    "BasketItem",
+    "Customer",
+    "CustomerPreference",
+    "Evidence",
+    "Intent",
+    "Inventory",
+    "Merchant",
+    "MerchantPolicy",
+    "Offer",
+    "Product",
+    "ProductVariant",
+    "SessionEvent",
+    "ShoppingSession",
+]
