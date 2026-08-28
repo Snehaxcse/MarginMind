@@ -1,7 +1,7 @@
 # MarginMind Architecture
 
-**Milestone:** 7 — Deterministic Policy Engine + approval requirements  
-**Status:** M0–M7 implemented. Proposal is not permission.  
+**Milestone:** 8 — Final revalidation + OOS rescue + re-approval  
+**Status:** M0–M8 implemented. Approval is not success.  
 **Authoritative product spec:** [MarginMind — Product & Build Specification.md](./MarginMind%20—%20Product%20%26%20Build%20Specification.md)
 
 This document describes a **5-day Buildathon architecture**. It optimises for a reliable live demo of the locked MVP, not for a production multi-service platform.
@@ -291,9 +291,33 @@ Seeded synthetic catalogue is acceptable and expected for the demo.
 - `build_complete_looks` scores structured metadata only (occasion/fit/style/colour + composition). No AI ranking, no discounts.
 - `evaluate_optional_add_on` is the NO_UPSELL foundation (`HARD_BUDGET_VIOLATION`). It does not run the Growth Decision Engine.
 - `propose_replacement` evaluates a swap without mutating the basket.
-- Approval (`APR-001`) binds to **session + action + exact basket row/version**. Granting approval does not execute. `BASK-001@v1` never authorizes `BASK-001@v2`. A rebuild/replacement requires a new approval.
+- Approval (`APR-001`) binds to **session + action + exact basket row/version**. Granting approval does not execute. `BASK-001@v1` never authorizes `BASK-001@v2`. A rebuild/replacement requires a new approval. Granting sets the basket to `APPROVED_UNVERIFIED` (still not checkout).
 
-### 6.7.1 Conversion friction (`backend/app/layers/friction/`)
+### 6.7.1 Final revalidation (`backend/app/layers/revalidation/`)
+
+**Approval ≠ success.** A granted `APR-001` freezes `BASK-001@v1`. It does not authorize execution against later catalogue, inventory, offer, or price state.
+
+```
+revalidate_approved_basket(db, session, approval_ref_id) -> RevalidationResult   # REVAL-001
+```
+
+Closed statuses: `PASS` · `FAILED` · `STOPPED`. Per-check status is `PASS` / `FAIL` / `N/A`.
+
+Checks (always recorded): `SKU_EXISTS` · `PRODUCT_ACTIVE` · `VARIANT_ACTIVE` · `CORRECT_VARIANT` · `INVENTORY_AVAILABLE` · `QUANTITY_AVAILABLE` · `PRICE_UNCHANGED` · `HARD_BUDGET` · `OFFER_EXISTS` · `OFFER_ACTIVE` · `OFFER_ELIGIBILITY` · `MARGIN_VALID` · `MERCHANT_POLICY_VALID` · `CUSTOMER_APPROVAL_VALID` · `BASKET_VERSION_VALID`
+
+Exact-version rule: `APR-001` may only revalidate `BASK-001@v1`. If the workflow basket is `@v2`, result is `STOPPED` with `STALE_APPROVAL` / `BASKET_VERSION_MISMATCH`. Approvals never carry forward.
+
+Price change vs snapshot → `PRICE_CHANGED` (`FAILED`). The approved lines are not rewritten. OOS on an approved SKU → `FAILED` / `OUT_OF_STOCK` (hero failure). Invalid/expired offer on the approved plan → `STOPPED`; the offer is not silently dropped.
+
+Policy Engine is **re-invoked against current state**. A PolicyDecision from five minutes ago is not reused as truth.
+
+OOS rescue (`propose_oos_replacement`) returns a candidate only: real SKU, active, in stock, hard constraints, HARD total, merchant margin. Soft fit/style scores rank; Gemini is not used. Accepting forks `BASK-001@v2` via copy-on-write. v1 stays reconstructable and keeps `APR-001`. v2 gets a **new** pending approval. Rejecting leaves v1 unchanged and checkout stopped.
+
+Repeated revalidation against unchanged commercial state returns the same `REVAL` row (fingerprint on approval + live stock/price/offer/budget). It does not spawn replacement baskets.
+
+M8 does not create Razorpay orders or decrement inventory at checkout.
+
+### 6.7.2 Conversion friction (`backend/app/layers/friction/`)
 
 Rule-first diagnosis from session signals + basket/inventory truth. Gemini is not used. The Growth Decision Engine is not invoked.
 
@@ -326,7 +350,7 @@ Rules:
 
 Every consequential decision points at evidence IDs, not at “the model said so”.
 
-Evidence examples: customer utterance, signal counts, basket snapshot, inventory row, policy check object.
+Evidence examples: customer utterance, signal counts, basket snapshot, inventory row, policy check object, revalidation result (`REVAL-…`). M8 writes these for later Agent Trace; the trace UI is not built yet.
 
 Audit events are **append-only**:
 
@@ -357,8 +381,8 @@ Customer message
     → Friction diagnosis         (rules first; AI may add confidence/copy)
     → Proposed bounded action    (Growth Decision Engine)
     → Policy validation          (deterministic; PASS / BLOCK / APPROVAL_REQUIRED)
-    → Customer approval          (exact basket version)
-    → Inventory/price/offer revalidation
+    → Customer approval          (exact basket version; approval ≠ success)
+    → Inventory/price/offer revalidation  (PASS / FAILED / STOPPED)
     → Razorpay checkout          (only if revalidation PASS)
     → Webhook verification       (signature + idempotency)
     → Audit trail
@@ -419,6 +443,7 @@ Only `VERIFIED` counts as a commercial success for metrics.
 | `friction_diagnoses` | `FRIC-001` | Rule-first friction + evidence refs (M5) |
 | `agent_actions` | `ACT-001` | Proposed bounded actions (M6). Not authorization. |
 | `policy_decisions` | `PDEC-001` | Policy Engine verdict + typed checks (M7). Not execution. |
+| `revalidation_results` | `REVAL-001` | Final live re-check of an exact approved basket (M8). |
 
 **Deferred:** `growth_opportunities`, `checkout_attempts`, `payments`, `webhook_events`, `campaigns`, `experiments`, `experiment_assignments`, `demand_clusters`.
 
@@ -454,6 +479,7 @@ Traces, eval scenarios, and merchant UI should display `ref_id`, not UUIDs.
 | Audit event | `AUD-001` |
 | Agent action | `ACT-001` |
 | Policy decision | `PDEC-001` |
+| Revalidation | `REVAL-001` |
 
 Assign these in seed data and in application code when rows are created. Do not regenerate a `ref_id` after insert. Eval fixtures and the farewell demo session should use the same ID scheme so a judge can follow `SES-001` → `EVD-001` → `ACT-001` → `BASK-001@v2` on the trace page.
 
@@ -472,6 +498,10 @@ Assign these in seed data and in application code when rows are created. Do not 
 ### Policy verdict
 
 `PASS` · `BLOCK` · `APPROVAL_REQUIRED`
+
+### Revalidation status
+
+`PASS` · `FAILED` · `STOPPED`
 
 These live in `backend/app/schemas/vocabulary.py` so frontend, engine, eval, and audit share one contract.
 
@@ -504,6 +534,7 @@ MarginMind/
         catalogue/
         basket/
         approval/            ← exact-version grant/reject; no execution
+        revalidation/        ← M8 live re-check; approval ≠ success
         friction/
         evidence/
         payments/

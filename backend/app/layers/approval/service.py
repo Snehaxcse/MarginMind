@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.ref_ids import RefPrefix, basket_version_ref, next_numeric_ref_id
 from app.layers.basket import version_label
 from app.models import Approval, Basket, ShoppingSession
-from app.schemas.vocabulary import ApprovalStatus
+from app.schemas.vocabulary import ApprovalStatus, CheckoutState
 
 
 class ApprovalServiceError(Exception):
@@ -74,6 +74,8 @@ def approve(db: Session, ref_id: str) -> Approval:
             f"Approval {ref_id} is {row.status}, not pending.",
         )
     row.status = ApprovalStatus.GRANTED.value
+    if row.basket is not None and row.basket.status == CheckoutState.DRAFT_BASKET.value:
+        row.basket.status = CheckoutState.APPROVED_UNVERIFIED.value
     db.flush()
     return row
 

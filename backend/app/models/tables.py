@@ -216,6 +216,7 @@ class ShoppingSession(Base):
     )
     agent_actions: Mapped[list[AgentAction]] = relationship(back_populates="session")
     policy_decisions: Mapped[list[PolicyDecision]] = relationship(back_populates="session")
+    revalidations: Mapped[list[RevalidationResult]] = relationship(back_populates="session")
 
 
 class SessionEvent(Base):
@@ -395,6 +396,38 @@ class PolicyDecision(Base):
     validated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     session: Mapped[ShoppingSession] = relationship(back_populates="policy_decisions")
+
+
+class RevalidationResult(Base):
+    __tablename__ = "revalidation_results"
+    __table_args__ = (
+        UniqueConstraint(
+            "approval_ref_id",
+            "state_fingerprint",
+            name="uq_revalidation_approval_fingerprint",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    ref_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("shopping_sessions.id"), index=True)
+    basket_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("baskets.id"), nullable=True, index=True
+    )
+    basket_ref_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    basket_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    approval_ref_id: Mapped[str] = mapped_column(String(32), index=True)
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    checks: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    failure_reasons: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    changed_fields: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    evidence_ref_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    state_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    offer_ref_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    validated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    session: Mapped[ShoppingSession] = relationship(back_populates="revalidations")
+    basket: Mapped[Basket | None] = relationship()
 
 
 class AuditEvent(Base):

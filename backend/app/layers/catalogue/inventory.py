@@ -24,3 +24,17 @@ def is_available(session: Session, sku: str, quantity: int = 1) -> bool:
     if variant.product is None or not variant.product.is_active:
         return False
     return get_available_quantity(session, sku) >= quantity
+
+
+def set_on_hand_quantity(session: Session, sku: str, quantity: int) -> None:
+    """Demo/test helper to simulate stock movement. Not used at checkout.
+
+    Does not reserve inventory. Checkout in M8 still does not decrement stock.
+    """
+    if quantity < 0:
+        raise ValueError("on-hand quantity cannot be negative")
+    variant = get_variant_by_sku(session, sku)
+    if variant is None or variant.inventory is None:
+        raise ValueError(f"SKU {sku} has no inventory row.")
+    variant.inventory.quantity = quantity
+    session.flush()

@@ -125,6 +125,30 @@ class SessionEventType(str, Enum):
     PRICE_QUESTION_ASKED = "price_question_asked"
 
 
+class RevalidationStatus(str, Enum):
+    PASS = "PASS"
+    FAILED = "FAILED"
+    STOPPED = "STOPPED"
+
+
+class RevalidationCheckName(str, Enum):
+    SKU_EXISTS = "SKU_EXISTS"
+    PRODUCT_ACTIVE = "PRODUCT_ACTIVE"
+    VARIANT_ACTIVE = "VARIANT_ACTIVE"
+    CORRECT_VARIANT = "CORRECT_VARIANT"
+    INVENTORY_AVAILABLE = "INVENTORY_AVAILABLE"
+    QUANTITY_AVAILABLE = "QUANTITY_AVAILABLE"
+    PRICE_UNCHANGED = "PRICE_UNCHANGED"
+    HARD_BUDGET = "HARD_BUDGET"
+    OFFER_EXISTS = "OFFER_EXISTS"
+    OFFER_ACTIVE = "OFFER_ACTIVE"
+    OFFER_ELIGIBILITY = "OFFER_ELIGIBILITY"
+    MARGIN_VALID = "MARGIN_VALID"
+    MERCHANT_POLICY_VALID = "MERCHANT_POLICY_VALID"
+    CUSTOMER_APPROVAL_VALID = "CUSTOMER_APPROVAL_VALID"
+    BASKET_VERSION_VALID = "BASKET_VERSION_VALID"
+
+
 class EvidenceKind(str, Enum):
     CUSTOMER_MESSAGE = "customer_message"
     SESSION_SIGNAL = "session_signal"
@@ -132,6 +156,8 @@ class EvidenceKind(str, Enum):
     INVENTORY_SNAPSHOT = "inventory_snapshot"
     FRICTION_EVALUATION = "friction_evaluation"
     POLICY_DECISION = "policy_decision"
+    REVALIDATION = "revalidation"
+    REPLACEMENT_PROPOSAL = "replacement_proposal"
 
 
 class PolicyCode(str, Enum):

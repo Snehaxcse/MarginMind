@@ -15,6 +15,7 @@ from app.schemas.friction import (
 )
 from app.schemas.intent import BudgetIntent, IntentExtractionResult, ShopperIntent
 from app.schemas.policy import PolicyCheckResult, PolicyDecision, PolicyValidationResult
+from app.schemas.revalidation import RescueDecision, RescueProposal, RevalidationResult
 from app.schemas.vocabulary import (
     ActionStatus,
     Actor,
@@ -33,6 +34,8 @@ from app.schemas.vocabulary import (
     PolicyValueType,
     PolicyVerdict,
     ProductCategory,
+    RevalidationCheckName,
+    RevalidationStatus,
     SessionEventType,
 )
 
@@ -67,6 +70,11 @@ __all__ = [
     "ProductCategory",
     "ProposedAction",
     "ReplacementProposal",
+    "RescueDecision",
+    "RescueProposal",
+    "RevalidationCheckName",
+    "RevalidationResult",
+    "RevalidationStatus",
     "SessionEventType",
     "SessionSignalInput",
     "ShopperIntent",

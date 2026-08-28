@@ -23,6 +23,7 @@ from app.models import (
 
 TRUNCATE_SQL = """
 TRUNCATE TABLE
+    revalidation_results,
     policy_decisions,
     agent_actions,
     friction_diagnoses,

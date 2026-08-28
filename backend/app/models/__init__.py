@@ -17,6 +17,7 @@ from app.models.tables import (
     Offer,
     PolicyDecision,
     Product,
+    RevalidationResult,
     ProductVariant,
     SessionEvent,
     ShoppingSession,
@@ -40,6 +41,7 @@ __all__ = [
     "PolicyDecision",
     "Product",
     "ProductVariant",
+    "RevalidationResult",
     "SessionEvent",
     "ShoppingSession",
 ]

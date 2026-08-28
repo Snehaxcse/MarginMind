@@ -4,7 +4,11 @@ Source of SKU, price, and stock truth. HARD constraints exclude candidates
 before any AI ranking. SOFT signals never exclude. Unknown SKUs fail closed.
 """
 
-from app.layers.catalogue.inventory import get_available_quantity, is_available
+from app.layers.catalogue.inventory import (
+    get_available_quantity,
+    is_available,
+    set_on_hand_quantity,
+)
 from app.layers.catalogue.service import (
     effective_price,
     filter_variants,
@@ -27,4 +31,5 @@ __all__ = [
     "list_available_variants",
     "list_products_by_category",
     "passes_hard_constraints",
+    "set_on_hand_quantity",
 ]

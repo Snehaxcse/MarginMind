@@ -234,112 +234,49 @@ Deterministic `validate_action` over database-backed commercial truth. Closed ve
 
 ---
 
-## M8 — Evidence store and append-only audit
+## M8 — Final revalidation + OOS rescue + re-approval
 
-**Goal:** The merchant can reconstruct a decision.
+**Status:** complete.
 
-**In scope**
+**Approval ≠ success.** Exact approved basket is frozen, then re-checked from live catalogue/inventory/offer/margin/policy truth (`REVAL-…`). OOS/price/offer failures do not silently mutate the approved snapshot. Rescue proposes a real replacement; accepting forks `BASK-001@v2` which requires a **new** approval. Repeated unchanged revalidation is idempotent. No Razorpay, no Gemini, no frontend, no Agent Trace UI.
 
-- `evidence_records` + `audit_events` writers used by orchestrator.
-- Stable `ref_id`s on evidence (`EVD-001`), agent actions (`ACT-001`), and audit events (`AUD-001`).
-- Trace query: ordered events for a session (intent, signals, friction, proposal, policy, approval, revalidation, payment), keyed by human-readable ids.
-- Guardrail counters derived from audit: hard-budget violations, invented SKU attempts, unauthorized offers, unapproved money actions (all should stay 0).
+**Out of scope (held)**
 
-**Out of scope**
-
-- Merchant UI.
+- Payment execution, webhooks, Agent Trace UI, merchant dashboard.
 
 **Test**
 
-- Running M4–M7 path writes a trace with evidence ids (`EVD-…`) that resolve.
-- Audit table is insert-only in code (no update API).
+- Unchanged approved basket → PASS.
+- Hero OOS on `SKU-004-M` → FAILED, basket unchanged, then real replacement, new version, old APR does not cover v2.
+- Price change → PRICE_CHANGED. Offer expiry → STOP. Stale v1 APR + v2 basket → STOP.
+- No valid substitute → STOP, no invented SKU.
 
 **Commit**
 
-- Evidence/audit layer + trace API (can be internal function until routers exist).
+- Revalidation + OOS rescue + tests.
 
 ---
 
-## M9 — Customer approval and basket freeze
-
-**Goal:** Agency is explicit. Approval is not success.
-
-**In scope**
-
-- Approve endpoint binds customer + basket `ref_id` + version (`BASK-001@v2`) + line snapshot.
-- Mismatch of version → reject.
-- Transition to `APPROVED_UNVERIFIED`.
-- Freeze snapshot for checkout.
-
-**Out of scope**
-
-- Razorpay. Revalidation (next).
-
-**Test**
-
-- Approve current version → stored approval.
-- Mutate basket after approval without new approve → checkout must not see a valid freeze of the new lines (or version bump invalidates old approval).
-
-**Commit**
-
-- Approval layer + tests.
-
----
-
-## M10 — Revalidation and hero OOS path
-
-**Goal:** Stale commerce state cannot be charged.
-
-**In scope**
-
-- Revalidate: SKU, variant, size, qty, price unchanged, offer, margin, campaign/offer active, hard budget, approval matches exact snapshot.
-- Any fail → `REVALIDATION_FAILED`, block checkout, do not silent-swap.
-- `FIND_ALTERNATIVE` using catalogue + GDE; new basket version; require new approval.
-- Seed/script helper to zero stock on a SKU (demo Scene 5).
-
-**Out of scope**
-
-- Payment provider.
-
-**Test**
-
-- Happy revalidation PASS.
-- Price change or OOS → FAIL + no order created.
-- Alternative is a real in-stock SKU within budget; old approval cannot be reused.
-
-**Commit**
-
-- Revalidation + alternative flow tests.
-
----
-
-## M11 — Customer Copilot UI
+## M9 — Customer Copilot UI
 
 **Goal:** Judges can play Scene 1–6 without calling curl.
+
+Approval binding already exists from M7; revalidation from M8. This milestone is the customer surface that calls those APIs.
 
 **In scope**
 
 - Scaffold Next.js + TS + Tailwind + shadcn.
-- Pages: chat/Dress Me, 3 looks, basket, approval, “revalidation failed” replacement prompt, checkout placeholder (stub pay button until M13).
+- Pages: chat/Dress Me, 3 looks, basket, approval, “revalidation failed” replacement prompt, checkout placeholder (stub pay button until payments).
 - Signal capture wired (size-guide clicks, rejects).
 - API client to FastAPI.
 
 **Out of scope**
 
-- Merchant UI. Real Razorpay.js. Colour/vibe/couple.
-
-**Test**
-
-- Browser: farewell prompt → 3 looks → select → basket ≤ 2500 → fit-guide prompt from signals → approve.
-- Manual OOS script → replacement prompt appears; cannot pay until re-approved.
-
-**Commit**
-
-- Frontend customer surface + backend routers needed for it.
+- Merchant UI. Real Razorpay.js. Colour/vibe/couple. Agent Trace.
 
 ---
 
-## M12 — Merchant Growth Control Centre UI
+## M10 — Merchant Growth Control Centre UI
 
 **Goal:** Reveal that the copilot was a decision engine.
 
@@ -347,22 +284,48 @@ Deterministic `validate_action` over database-backed commercial truth. Closed ve
 
 - `/merchant`: top opportunities (even if few, derived from open frictions / failed revalidations / NO_UPSELL).
 - Opportunity detail: What / Why / Fix.
-- Session agent trace (clickable timeline).
 - Policy studio: view/edit margin, max discount, stacking, approval flags (simple form).
 - Guardrail counters + audit list.
 
 **Out of scope**
 
-- Experiments, campaign agent, demand-gap product, background-job theatre beyond counts from real events.
+- Full Agent Trace timeline (next). Experiments, campaign agent, demand-gap product.
+
+---
+
+## M11 — Evidence store, append-only audit, Agent Trace
+
+**Moved later.** Previously listed as M8.
+
+**Goal:** The merchant can reconstruct a decision.
+
+**In scope**
+
+- `evidence` + `audit_events` writers used by the orchestrator end-to-end (M8 already writes revalidation/rescue evidence).
+- Trace query: ordered events for a session (intent, signals, friction, proposal, policy, approval, revalidation, replacement, payment), keyed by human-readable ids.
+- Guardrail counters derived from audit: hard-budget violations, invented SKU attempts, unauthorized offers, unapproved money actions (all should stay 0).
+- Session agent trace page (clickable timeline).
+
+**Out of scope**
+
+- New commercial engines.
 
 **Test**
 
-- Same session from M11 appears in trace with policy and approval steps.
-- `NO_UPSELL` visible. Guardrails show 0 violations after a clean run.
+- Running M4–M8 path writes a trace with evidence ids (`EVD-…`) that resolve.
+- Audit table is insert-only in code (no update API).
+- Hero OOS session renders: approved v1 → inventory revalidation → OUT_OF_STOCK → FAILED → FIND_ALTERNATIVE → new approval required.
 
-**Commit**
+---
 
-- Merchant surface.
+## M12 — Thin HTTP adapters
+
+**Goal:** The copilot and merchant UIs can call M3–M8 without embedding SQLAlchemy.
+
+**In scope**
+
+- Session, message, signal, basket, approve, revalidate, replacement accept/reject routes.
+- No Razorpay execution. No Agent Trace page (M11).
 
 ---
 
@@ -457,6 +420,6 @@ Deterministic `validate_action` over database-backed commercial truth. Closed ve
 
 ## Proposed next milestone after approval
 
-**M8 — Evidence store and append-only audit.**
+**M9 — Customer Copilot UI.**
 
-Running M4–M7 should produce a reconstructable Agent Trace (intent, signals, friction, proposal, policy checks, approval required?). Do not start M8 without approval.
+Wire the existing M7 approval and M8 revalidation/OOS-rescue services into a customer surface (including the sold-out replacement prompt). Agent Trace remains later (M11). Do not start M9 without approval.
