@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.ref_ids import RefPrefix, next_numeric_ref_id
 from app.models import Intent, ShoppingSession
-from app.schemas.intent import IntentExtractionResult
+from app.schemas.intent import BudgetIntent, IntentExtractionResult, ShopperIntent
+from app.schemas.vocabulary import BudgetType
 
 
 def persist_intent(
@@ -42,3 +44,27 @@ def persist_intent(
     db.add(row)
     db.flush()
     return row
+
+
+def shopper_intent_from_row(row: Intent) -> ShopperIntent:
+    budget_type = BudgetType(row.budget_type) if row.budget_type else None
+    return ShopperIntent(
+        occasion=row.occasion,
+        budget=BudgetIntent(amount=row.budget_amount, type=budget_type),
+        height=row.height,
+        usual_size=row.usual_size,
+        fit_preferences=list(row.fit_preferences or []),
+        style_preferences=list(row.style_preferences or []),
+        colour_preferences=list(row.colour_preferences or []),
+        excluded_materials=list(row.excluded_materials or []),
+        excluded_coverage=list(row.excluded_coverage or []),
+        goal=row.goal,
+    )
+
+
+def latest_intent_for_session(db: Session, shopping: ShoppingSession) -> Intent | None:
+    return db.scalar(
+        select(Intent)
+        .where(Intent.session_id == shopping.id)
+        .order_by(Intent.created_at.desc(), Intent.ref_id.desc())
+    )

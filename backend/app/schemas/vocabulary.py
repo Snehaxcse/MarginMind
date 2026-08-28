@@ -35,6 +35,7 @@ class FrictionType(str, Enum):
     CATALOGUE_GAP = "CATALOGUE_GAP"
     CHECKOUT_HESITATION = "CHECKOUT_HESITATION"
     NONE = "NONE"
+    UNKNOWN = "UNKNOWN"
 
 
 class AutonomyLevel(str, Enum):
@@ -69,10 +70,28 @@ class SessionEventType(str, Enum):
     CUSTOMER_MESSAGE = "customer_message"
     INTENT_EXTRACTED = "intent_extracted"
     PROVIDER_FAILED = "provider_failed"
+    PRODUCT_VIEWED = "product_viewed"
+    SIZE_GUIDE_OPENED = "size_guide_opened"
+    PRODUCT_COMPARED = "product_compared"
+    RECOMMENDATION_REJECTED = "recommendation_rejected"
+    REJECTION_REASON_RECORDED = "rejection_reason_recorded"
+    BASKET_UPDATED = "basket_updated"
+    BASKET_OVER_HARD_BUDGET = "basket_over_hard_budget"
+    SIZE_UNAVAILABLE_OBSERVED = "size_unavailable_observed"
+    PRODUCT_OOS_OBSERVED = "product_oos_observed"
+    CHOICES_SHOWN = "choices_shown"
+    CHECKOUT_STARTED = "checkout_started"
+    CHECKOUT_ABANDONED = "checkout_abandoned"
+    FIT_QUESTION_ASKED = "fit_question_asked"
+    PRICE_QUESTION_ASKED = "price_question_asked"
 
 
 class EvidenceKind(str, Enum):
     CUSTOMER_MESSAGE = "customer_message"
+    SESSION_SIGNAL = "session_signal"
+    BASKET_SNAPSHOT = "basket_snapshot"
+    INVENTORY_SNAPSHOT = "inventory_snapshot"
+    FRICTION_EVALUATION = "friction_evaluation"
 
 
 class PolicyCode(str, Enum):

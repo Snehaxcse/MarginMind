@@ -294,6 +294,16 @@ Seeded synthetic catalogue is acceptable and expected for the demo.
 - `propose_replacement` evaluates a swap without mutating the basket.
 - Approval later binds to one exact version. Never silently mutate an approved snapshot.
 
+### 6.7.1 Conversion friction (`backend/app/layers/friction/`)
+
+Rule-first diagnosis from session signals + basket/inventory truth. Gemini is not used. The Growth Decision Engine is not invoked.
+
+- `record_session_signal` writes a `session_events` row (`EVT-…`) and an evidence row (`EVD-…`).
+- `diagnose_friction` returns a ranked `FrictionEvaluation` (primary + secondary). WHAT/WHY only; no FIX and no `BoundedAction`.
+- Confidence is a documented step function: 1 signal → 0.45, 2 → 0.65, 3 → 0.84, 4+ or commercial-truth rules → 0.92.
+- Insufficient evidence yields `NONE` (quiet session) or `UNKNOWN` (activity without a matching rule). Diagnoses always carry `evidence_ref_ids`.
+- Persisted as `friction_diagnoses` (`FRIC-001`).
+
 ### 6.8 Razorpay / payments (`backend/app/layers/payments/`)
 
 Interface now; Razorpay Test Mode in a later milestone.
@@ -407,8 +417,9 @@ Only `VERIFIED` counts as a commercial success for metrics.
 | `approvals` | `APR-001` | Binds customer to a basket version |
 | `evidence` | `EVD-001` | Evidence packs |
 | `audit_events` | `AUD-001` | Append-only trace |
+| `friction_diagnoses` | `FRIC-001` | Rule-first friction + evidence refs (M5) |
 
-**Deferred (not in M1):** `friction_diagnoses`, `growth_opportunities`, `agent_actions`, `checkout_attempts`, `payments`, `webhook_events`, `campaigns`, `experiments`, `experiment_assignments`, `demand_clusters`.
+**Deferred (not in M1):** `growth_opportunities`, `agent_actions`, `checkout_attempts`, `payments`, `webhook_events`, `campaigns`, `experiments`, `experiment_assignments`, `demand_clusters`.
 
 Product commercial fields: name, category, description, base price, colour, material, fit, silhouette, length, stretch, coverage, occasion tags, style tags, margin band, margin percent, active. Inventory is never stored as AI metadata.
 
@@ -438,6 +449,7 @@ Traces, eval scenarios, and merchant UI should display `ref_id`, not UUIDs.
 | Offer | `OFR-001` |
 | Approval | `APR-001` |
 | Evidence record | `EVD-001` |
+| Friction diagnosis | `FRIC-001` |
 | Audit event | `AUD-001` |
 
 Assign these in seed data and in application code when rows are created. Do not regenerate a `ref_id` after insert. Eval fixtures and the farewell demo session should use the same ID scheme so a judge can follow `SES-001` → `EVD-001` → `ACT-001` → `BASK-001@v2` on the trace page.
@@ -452,7 +464,7 @@ Assign these in seed data and in application code when rows are created. Do not 
 
 ### Friction
 
-`FIT_UNCERTAINTY` · `STYLE_UNCERTAINTY` · `COLOUR_UNCERTAINTY` · `BUDGET_MISMATCH` · `PRICE_HESITATION` · `SIZE_UNAVAILABLE` · `OUT_OF_STOCK` · `CHOICE_OVERLOAD` · `BASKET_INCOMPLETE` · `CATALOGUE_GAP` · `CHECKOUT_HESITATION` · `NONE`
+`FIT_UNCERTAINTY` · `STYLE_UNCERTAINTY` · `COLOUR_UNCERTAINTY` · `BUDGET_MISMATCH` · `PRICE_HESITATION` · `SIZE_UNAVAILABLE` · `OUT_OF_STOCK` · `CHOICE_OVERLOAD` · `BASKET_INCOMPLETE` · `CATALOGUE_GAP` · `CHECKOUT_HESITATION` · `NONE` · `UNKNOWN`
 
 ### Policy verdict
 
@@ -488,6 +500,7 @@ MarginMind/
       layers/
         catalogue/
         basket/
+        friction/
         evidence/
         payments/
       providers/llm/         ← LLMProvider protocol

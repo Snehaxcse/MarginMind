@@ -211,6 +211,9 @@ class ShoppingSession(Base):
     approvals: Mapped[list[Approval]] = relationship(back_populates="session")
     evidence: Mapped[list[Evidence]] = relationship(back_populates="session")
     audit_events: Mapped[list[AuditEvent]] = relationship(back_populates="session")
+    friction_diagnoses: Mapped[list[FrictionDiagnosis]] = relationship(
+        back_populates="session"
+    )
 
 
 class SessionEvent(Base):
@@ -323,6 +326,24 @@ class Evidence(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     session: Mapped[ShoppingSession | None] = relationship(back_populates="evidence")
+
+
+class FrictionDiagnosis(Base):
+    __tablename__ = "friction_diagnoses"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    ref_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("shopping_sessions.id"), index=True)
+    friction_type: Mapped[str] = mapped_column(String(64), index=True)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3))
+    evidence_ref_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    reason_codes: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    summary: Mapped[str] = mapped_column(Text)
+    why: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(32), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    session: Mapped[ShoppingSession] = relationship(back_populates="friction_diagnoses")
 
 
 class AuditEvent(Base):

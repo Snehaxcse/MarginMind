@@ -163,15 +163,17 @@ Versioned baskets, catalogue-authoritative prices, **total** HARD budget validat
 
 ## M5 — Session signals and rule-based friction diagnosis
 
-**Goal:** Hesitation is evidenced, not guessed from vibes alone.
+**Status:** complete.
 
-**In scope**
+Typed session signals (`EVT-…` + `EVD-…`), deterministic friction resolver, ranked diagnoses with WHAT/WHY, persistence (`FRIC-…`). No Gemini, GDE, FIX, or bounded actions.
+
+**In scope (done)**
 
 - Record signals: view counts, size-guide opens, recommendation rejects, checkout-started, comparison events.
-- Deterministic mapper to `FrictionType` + confidence band (e.g. size-guide ≥3 → `FIT_UNCERTAINTY`; basket > hard budget → `BUDGET_MISMATCH`; selected size stock 0 → `SIZE_UNAVAILABLE`).
+- Deterministic mapper to `FrictionType` + documented confidence steps.
 - Persist `friction_diagnoses` with evidence ids.
 
-**Out of scope**
+**Out of scope (held)**
 
 - Action selection, LLM friction override.
 
@@ -467,6 +469,6 @@ Versioned baskets, catalogue-authoritative prices, **total** HARD budget validat
 
 ## Proposed next milestone after approval
 
-**M5 — Session signals and rule-based friction diagnosis.**
+**M6 — Growth Decision Engine.**
 
-Do not start M5 without approval.
+Smallest valid proposed action from diagnosed friction, including `NO_UPSELL` and `STOP`. Do not start M6 without approval.

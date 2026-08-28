@@ -7,6 +7,11 @@ from app.schemas.basket import (
     ReplacementProposal,
 )
 from app.schemas.catalogue import CatalogueConstraints, SoftCatalogueSignals
+from app.schemas.friction import (
+    FrictionDiagnosisResult,
+    FrictionEvaluation,
+    SessionSignalInput,
+)
 from app.schemas.intent import BudgetIntent, IntentExtractionResult, ShopperIntent
 from app.schemas.vocabulary import (
     Actor,
@@ -38,6 +43,8 @@ __all__ = [
     "ConstraintKind",
     "DiscountType",
     "EvidenceKind",
+    "FrictionDiagnosisResult",
+    "FrictionEvaluation",
     "FrictionType",
     "IntentExtractionResult",
     "LookCandidate",
@@ -47,6 +54,7 @@ __all__ = [
     "ProductCategory",
     "ReplacementProposal",
     "SessionEventType",
+    "SessionSignalInput",
     "ShopperIntent",
     "SoftCatalogueSignals",
 ]

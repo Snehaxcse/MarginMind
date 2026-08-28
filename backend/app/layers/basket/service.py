@@ -76,6 +76,14 @@ def get_basket(db: Session, ref: str, *, version: int | None = None) -> Basket |
     return db.scalar(stmt)
 
 
+def latest_basket_for_session(db: Session, shopping: ShoppingSession) -> Basket | None:
+    return db.scalar(
+        _basket_query()
+        .where(Basket.session_id == shopping.id)
+        .order_by(Basket.version.desc(), Basket.created_at.desc())
+    )
+
+
 def require_basket(db: Session, ref: str, *, version: int | None = None) -> Basket:
     row = get_basket(db, ref, version=version)
     if row is None:
