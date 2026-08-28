@@ -1,5 +1,11 @@
 """Pydantic request/response models and closed vocabularies."""
 
+from app.schemas.basket import (
+    AddOnEvaluation,
+    BasketValidationResult,
+    LookCandidate,
+    ReplacementProposal,
+)
 from app.schemas.catalogue import CatalogueConstraints, SoftCatalogueSignals
 from app.schemas.intent import BudgetIntent, IntentExtractionResult, ShopperIntent
 from app.schemas.vocabulary import (
@@ -21,8 +27,10 @@ from app.schemas.vocabulary import (
 
 __all__ = [
     "Actor",
+    "AddOnEvaluation",
     "AutonomyLevel",
     "BoundedAction",
+    "BasketValidationResult",
     "BudgetIntent",
     "BudgetType",
     "CatalogueConstraints",
@@ -32,10 +40,12 @@ __all__ = [
     "EvidenceKind",
     "FrictionType",
     "IntentExtractionResult",
+    "LookCandidate",
     "PolicyCode",
     "PolicyValueType",
     "PolicyVerdict",
     "ProductCategory",
+    "ReplacementProposal",
     "SessionEventType",
     "ShopperIntent",
     "SoftCatalogueSignals",

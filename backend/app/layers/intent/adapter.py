@@ -1,6 +1,7 @@
 """Map structured intent to HARD catalogue gates and SOFT ranking signals.
 
-Per-item max_price is only a candidate ceiling. Basket-total budget is later.
+Per-item max_price is only a candidate ceiling. Basket-total HARD budget is
+enforced by the basket layer, not by this adapter.
 """
 
 from __future__ import annotations

@@ -275,7 +275,8 @@ Source of product truth.
 
 - Products + variants + stock + fashion metadata (fit, silhouette, length, occasion/style tags, margin band).
 - Retrieval pipeline: **hard filters first** via `CatalogueConstraints` (budget, size, in-stock, merchant, restricted SKUs/products, excluded material/coverage/fit/silhouette, inactive rows). Unknown SKU / unknown merchant / malformed tokens fail closed.
-- A HARD customer budget may be copied to `max_price` as a **per-item candidate ceiling only**. Basket-total enforcement belongs to the later basket/policy layer.
+- A HARD customer budget may be copied to `max_price` as a **per-item candidate ceiling only**.
+- **Basket-total** HARD budget is enforced by the basket layer: `sum(effective_price * qty)` must be `<=` budget. Individually valid SKUs can still fail as a set.
 - `SoftCatalogueSignals` (colour, silhouette, fit, style, occasion) are ranking hints only and **never exclude** a candidate.
 - One-size variants (`OS`) stay eligible under `required_size` unless `allow_one_size=False`.
 - Revalidation reads live stock and price, not the recommendation cache.
@@ -285,11 +286,13 @@ Seeded synthetic catalogue is acceptable and expected for the demo.
 
 ### 6.7 Basket / approval (`backend/app/layers/basket/`)
 
-- Basket is **versioned**. Every mutation increments `basket_version`.
-- Approval records: session, basket_id, version, line items, prices, offers, timestamp.
-- `APPROVED ≠ SUCCESS`.
-- Freeze a snapshot when checkout is requested.
-- If revalidation fails, do not silently substitute. Propose alternative → new version → new approval.
+- Basket is **versioned** (`BASK-001@v1`). Material changes copy-on-write to a new version; prior versions stay reconstructable.
+- Line prices are catalogue effective prices (override or base). Callers cannot supply the authoritative price.
+- `validate_basket` checks inventory plus **total** HARD budget. FLEXIBLE overage warns; unknown budget skips the cap.
+- `build_complete_looks` scores structured metadata only (occasion/fit/style/colour + composition). No AI ranking, no discounts.
+- `evaluate_optional_add_on` is the NO_UPSELL foundation (`HARD_BUDGET_VIOLATION`). It does not run the Growth Decision Engine.
+- `propose_replacement` evaluates a swap without mutating the basket.
+- Approval later binds to one exact version. Never silently mutate an approved snapshot.
 
 ### 6.8 Razorpay / payments (`backend/app/layers/payments/`)
 

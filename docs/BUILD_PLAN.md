@@ -135,7 +135,9 @@ Unknown utterances stay unknown. Provider errors do not persist a fake intent. G
 
 ## M4 — Basket Architect (deterministic)
 
-**Goal:** Complete a look inside a hard budget using real SKUs.
+**Status:** complete.
+
+Versioned baskets, catalogue-authoritative prices, **total** HARD budget validation, deterministic complete-look builder (up to 3), NO_UPSELL add-on helper, replacement proposal (no auto-swap). No Gemini, GDE, or discounts.
 
 **In scope**
 
@@ -465,8 +467,6 @@ Unknown utterances stay unknown. Provider errors do not persist a fake intent. G
 
 ## Proposed next milestone after approval
 
-**M4 — Basket Architect (deterministic).**
+**M5 — Session signals and rule-based friction diagnosis.**
 
-Complete looks from real SKUs with **basket-total** hard-budget enforcement. Item-level `max_price` from M2/M3 is not that check.
-
-Do not start M4 without approval.
+Do not start M5 without approval.

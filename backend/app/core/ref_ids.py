@@ -34,6 +34,16 @@ def basket_version_ref(basket_ref_id: str, version: int) -> str:
     return f"{basket_ref_id}@v{version}"
 
 
+def parse_basket_version_ref(value: str) -> tuple[str, int | None]:
+    if "@v" not in value:
+        return value, None
+    base, _, rest = value.partition("@v")
+    if not rest.isdigit():
+        raise ValueError(f"Invalid basket version ref: {value}")
+    return base, int(rest)
+
+
+
 def _numeric_suffix(ref_id: str, prefix: str) -> int | None:
     if not ref_id.startswith(f"{prefix}-"):
         return None

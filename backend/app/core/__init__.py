@@ -7,7 +7,13 @@ message → intent → catalogue → recommend → signals → friction
 """
 
 from app.core.config import Settings, get_settings
-from app.core.ref_ids import RefPrefix, basket_version_ref, format_ref_id, next_numeric_ref_id
+from app.core.ref_ids import (
+    RefPrefix,
+    basket_version_ref,
+    format_ref_id,
+    next_numeric_ref_id,
+    parse_basket_version_ref,
+)
 
 __all__ = [
     "Settings",
@@ -16,4 +22,5 @@ __all__ = [
     "basket_version_ref",
     "format_ref_id",
     "next_numeric_ref_id",
+    "parse_basket_version_ref",
 ]
