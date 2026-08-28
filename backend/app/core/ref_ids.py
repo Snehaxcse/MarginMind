@@ -25,6 +25,8 @@ class RefPrefix:
     ACTION = "ACT"
     POLICY_DECISION = "PDEC"
     REVALIDATION = "REVAL"
+    CHECKOUT = "CHK"
+    PAYMENT = "PAY"
 
 
 def format_ref_id(prefix: str, n: int, *, suffix: str | None = None) -> str:

@@ -8,6 +8,12 @@ from app.schemas.basket import (
     ReplacementProposal,
 )
 from app.schemas.catalogue import CatalogueConstraints, SoftCatalogueSignals
+from app.schemas.checkout import (
+    CheckoutAttemptView,
+    CheckoutPayload,
+    ClientPaymentResultRequest,
+    CreateCheckoutRequest,
+)
 from app.schemas.friction import (
     FrictionDiagnosisResult,
     FrictionEvaluation,
@@ -24,6 +30,7 @@ from app.schemas.vocabulary import (
     BoundedAction,
     BudgetType,
     CheckStatus,
+    CheckoutAttemptStatus,
     CheckoutState,
     ConstraintKind,
     DiscountType,
@@ -34,6 +41,7 @@ from app.schemas.vocabulary import (
     PolicyValueType,
     PolicyVerdict,
     ProductCategory,
+    PaymentStatus,
     RevalidationCheckName,
     RevalidationStatus,
     SessionEventType,
@@ -51,8 +59,13 @@ __all__ = [
     "BudgetType",
     "CatalogueConstraints",
     "CheckStatus",
+    "CheckoutAttemptStatus",
+    "CheckoutAttemptView",
+    "CheckoutPayload",
     "CheckoutState",
+    "ClientPaymentResultRequest",
     "ConstraintKind",
+    "CreateCheckoutRequest",
     "DiscountType",
     "EvidenceKind",
     "FrictionDiagnosisResult",
@@ -60,6 +73,7 @@ __all__ = [
     "FrictionType",
     "IntentExtractionResult",
     "LookCandidate",
+    "PaymentStatus",
     "PolicyCheckName",
     "PolicyCheckResult",
     "PolicyCode",

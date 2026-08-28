@@ -27,7 +27,7 @@ Each milestone below is **small, sequential, independently testable, and committ
 | 0 / start | **M0** | Architecture + empty modules |
 | Day 1 | **M1–M4** | Data, catalogue, stub intent, baskets |
 | Day 2 | **M5–M8** | Friction, GDE, policy, evidence |
-| Day 3 | **M9–M12** | Approval, revalidation, both UIs |
+| Day 3 | **M9–M10** | Razorpay test order + webhook verification |
 | Day 4 | **M13–M14** | Razorpay + synthetic eval |
 | Day 5 | **M15** | Demo script, polish, deploy smoke |
 
@@ -257,26 +257,85 @@ Deterministic `validate_action` over database-backed commercial truth. Closed ve
 
 ---
 
-## M9 — Customer Copilot UI
+## M9 — Razorpay Test Mode order + checkout state machine
 
-**Goal:** Judges can play Scene 1–6 without calling curl.
+**Status:** complete.
 
-Approval binding already exists from M7; revalidation from M8. This milestone is the customer surface that calls those APIs.
+**Goal:** After customer approval → exact basket version → M8 revalidation PASS, create an idempotent checkout attempt and a Razorpay **Test Mode** order. Client-side checkout success is not verified payment.
+
+```
+approved exact basket → live revalidation PASS → CheckoutAttempt (CHK-…)
+  → provider order → safe checkout payload → await payment result (M10)
+```
 
 **In scope**
 
-- Scaffold Next.js + TS + Tailwind + shadcn.
-- Pages: chat/Dress Me, 3 looks, basket, approval, “revalidation failed” replacement prompt, checkout placeholder (stub pay button until payments).
-- Signal capture wired (size-guide clicks, rejects).
-- API client to FastAPI.
+- `PaymentProvider` with `StubPaymentProvider` (tests) and `RazorpayPaymentProvider` (Test Mode via httpx; no official SDK in the app layer).
+- `CheckoutAttempt` (`CHK-001`) and `Payment` (`PAY-001`). Amounts are integer paise. ₹2,447 → 244700.
+- Closed checkout statuses. M9 stops at `ORDER_CREATED` / `CHECKOUT_PRESENTED`. Never `VERIFIED`.
+- Checkout service: reject caller price, require granted exact approval, run M8, require PASS, compute server amount, idempotent attempt, create order, persist `provider_order_id`, return `key_id` + order id + amount + currency + CHK ref.
+- Idempotency key: `checkout:{session_ref}:{basket_ref}:v{version}:{approval_ref}`. Reuse a valid attempt; retry `FAILED` in place; do not occupy the key on revalidation failure.
+- Optional client-result recorder: `PAYMENT_REPORTED` / `VERIFICATION_PENDING` only.
+- Thin FastAPI: `POST /api/v1/checkout`, `GET /api/v1/checkout/{ref_id}`, health. Secrets from env only.
 
 **Out of scope**
 
-- Merchant UI. Real Razorpay.js. Colour/vibe/couple. Agent Trace.
+- Customer frontend / Checkout.js. Gemini. Merchant dashboard. Agent Trace UI.
+- Webhook or signature verification (M10).
+- Trusting client amount or marking `VERIFIED` from the browser.
+
+**Test**
+
+- Hero approved look → PASS → stub order, amount 244700, CHK/APR/REVAL recorded, payment not verified.
+- OOS, price change, invalid offer, stale v1→v2, hard-budget → no provider order.
+- Duplicate create-checkout → one order. Provider failure → `FAILED`, retry in place.
+- Client `VERIFIED` callback does not set `verified_at`. Stub works offline. Live Razorpay is opt-in (`MARGINMIND_LIVE_RAZORPAY=1`).
+
+**Commit**
+
+- Checkout + payments layer + FastAPI checkout routes + tests.
 
 ---
 
-## M10 — Merchant Growth Control Centre UI
+## M10 — Webhook + signature verification
+
+**Goal:** Independent verification of money movement. A browser “payment succeeded” is not commercial truth.
+
+**In scope**
+
+- `verify_webhook` on `RazorpayPaymentProvider`: HMAC signature, normalized event.
+- Idempotent `webhook_events` processing. Duplicate delivery does not double-count.
+- Transition CheckoutAttempt/Payment to `VERIFIED` only after cryptographic/server proof.
+- Fetch payment from Razorpay if webhook delivery is delayed (demo kill-switch still must not trust the client alone).
+
+**Out of scope**
+
+- Live/prod keys. Refunds. Subscriptions. Customer frontend.
+
+**Test**
+
+- Valid test-mode webhook → one verified payment + audit event.
+- Replay → one payment row.
+- Invalid signature → ignored, not verified.
+- LLM/backend logs contain no key material.
+
+Do not start M10 without approval.
+
+---
+
+## Later — Customer Copilot UI
+
+**Moved later.** Previously listed as M9.
+
+**Goal:** Judges can play Scene 1–6 without calling curl.
+
+Approval, revalidation, and checkout-order APIs already exist. This milestone is the customer surface that calls them, including Checkout.js against the M9 payload (widget only; verification remains M10).
+
+**Out of scope at that time:** Merchant UI. Colour/vibe/couple. Agent Trace.
+
+---
+
+## Later — Merchant Growth Control Centre UI
 
 **Goal:** Reveal that the copilot was a decision engine.
 
@@ -320,41 +379,15 @@ Approval binding already exists from M7; revalidation from M8. This milestone is
 
 ## M12 — Thin HTTP adapters
 
-**Goal:** The copilot and merchant UIs can call M3–M8 without embedding SQLAlchemy.
+**Goal:** The copilot and merchant UIs can call remaining M3–M8 flows without embedding SQLAlchemy.
 
-**In scope**
-
-- Session, message, signal, basket, approve, revalidate, replacement accept/reject routes.
-- No Razorpay execution. No Agent Trace page (M11).
+Checkout HTTP already exists from M9 (`POST/GET /api/v1/checkout`). This milestone adds session, message, signal, basket, approve, revalidate, and replacement routes. No webhook verification (M10). No Agent Trace page.
 
 ---
 
-## M13 — Razorpay Test Mode, webhooks, idempotency
+## M13 — (absorbed)
 
-**Goal:** Independent verification of money movement.
-
-**In scope**
-
-- `RazorpayPaymentProvider` behind the same interface as the stub.
-- Create test order only after revalidation PASS.
-- Checkout.js on customer UI.
-- Webhook: signature verification, idempotent processing, payment row, session → `VERIFIED`.
-- Duplicate delivery does not double-count.
-
-**Out of scope**
-
-- Live/prod keys. Refunds. Subscriptions.
-
-**Test**
-
-- Test payment success → verified order + audit event.
-- Replay webhook → one payment row.
-- Invalid signature → ignored, not verified.
-- LLM/backend logs contain no key material.
-
-**Commit**
-
-- Payments layer + webhook route + frontend widget.
+Razorpay Test Mode **order creation** is M9. **Webhook/signature verification** is M10. Checkout.js lives with the later customer UI. Do not re-implement order creation here.
 
 ---
 
@@ -420,6 +453,7 @@ Approval binding already exists from M7; revalidation from M8. This milestone is
 
 ## Proposed next milestone after approval
 
-**M9 — Customer Copilot UI.**
+**M10 — Webhook + signature verification.**
 
-Wire the existing M7 approval and M8 revalidation/OOS-rescue services into a customer surface (including the sold-out replacement prompt). Agent Trace remains later (M11). Do not start M9 without approval.
+Verify Razorpay Test Mode payments server-side. Client checkout success remains untrusted. Do not start M10 without approval. Do not build the customer frontend in M10.
+

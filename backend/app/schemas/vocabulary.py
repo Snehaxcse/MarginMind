@@ -158,6 +158,7 @@ class EvidenceKind(str, Enum):
     POLICY_DECISION = "policy_decision"
     REVALIDATION = "revalidation"
     REPLACEMENT_PROPOSAL = "replacement_proposal"
+    CHECKOUT = "checkout"
 
 
 class PolicyCode(str, Enum):
@@ -201,3 +202,33 @@ class CheckoutState(str, Enum):
     VERIFIED = "VERIFIED"
     PAYMENT_FAILED = "PAYMENT_FAILED"
     ABANDONED = "ABANDONED"
+
+
+class CheckoutAttemptStatus(str, Enum):
+    """CheckoutAttempt state machine. Distinct from basket CheckoutState.
+
+    M9 normally stops at ORDER_CREATED / CHECKOUT_PRESENTED.
+    Client-reported success is PAYMENT_REPORTED or VERIFICATION_PENDING.
+    VERIFIED is reserved for M10 cryptographic/server proof.
+    """
+
+    CREATED = "CREATED"
+    REVALIDATION_REQUIRED = "REVALIDATION_REQUIRED"
+    READY_FOR_PROVIDER = "READY_FOR_PROVIDER"
+    ORDER_CREATED = "ORDER_CREATED"
+    CHECKOUT_PRESENTED = "CHECKOUT_PRESENTED"
+    PAYMENT_REPORTED = "PAYMENT_REPORTED"
+    VERIFICATION_PENDING = "VERIFICATION_PENDING"
+    VERIFIED = "VERIFIED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class PaymentStatus(str, Enum):
+    """Payment commercial state. Client success is never VERIFIED."""
+
+    CREATED = "CREATED"
+    REPORTED = "REPORTED"
+    VERIFICATION_PENDING = "VERIFICATION_PENDING"
+    VERIFIED = "VERIFIED"
+    FAILED = "FAILED"

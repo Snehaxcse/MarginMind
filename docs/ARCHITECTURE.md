@@ -1,7 +1,7 @@
 # MarginMind Architecture
 
-**Milestone:** 8 — Final revalidation + OOS rescue + re-approval  
-**Status:** M0–M8 implemented. Approval is not success.  
+**Milestone:** 9 — Razorpay Test Mode order + checkout state machine  
+**Status:** M0–M9 implemented. Client checkout success is not verified payment.  
 **Authoritative product spec:** [MarginMind — Product & Build Specification.md](./MarginMind%20—%20Product%20%26%20Build%20Specification.md)
 
 This document describes a **5-day Buildathon architecture**. It optimises for a reliable live demo of the locked MVP, not for a production multi-service platform.
@@ -315,7 +315,7 @@ OOS rescue (`propose_oos_replacement`) returns a candidate only: real SKU, activ
 
 Repeated revalidation against unchanged commercial state returns the same `REVAL` row (fingerprint on approval + live stock/price/offer/budget). It does not spawn replacement baskets.
 
-M8 does not create Razorpay orders or decrement inventory at checkout.
+M8 does not create Razorpay orders or decrement inventory at checkout. M9 may create a Test Mode order only after this revalidation returns PASS.
 
 ### 6.7.2 Conversion friction (`backend/app/layers/friction/`)
 
@@ -327,30 +327,64 @@ Rule-first diagnosis from session signals + basket/inventory truth. Gemini is no
 - Insufficient evidence yields `NONE` (quiet session) or `UNKNOWN` (activity without a matching rule). Diagnoses always carry `evidence_ref_ids`.
 - Persisted as `friction_diagnoses` (`FRIC-001`).
 
-### 6.8 Razorpay / payments (`backend/app/layers/payments/`)
+### 6.8 Razorpay / payments (`backend/app/layers/payments/`, `backend/app/layers/checkout/`)
 
-Interface now; Razorpay Test Mode in a later milestone.
+Application code depends on `PaymentProvider`, not on Razorpay SDK or HTTP details.
 
 ```
-create_order(frozen_basket) -> PaymentOrder
-verify_webhook(payload, signature) -> PaymentEvent
+PaymentProvider.create_order(amount_minor, currency, receipt, notes, idempotency_key) -> PaymentOrder
+PaymentProvider.verify_webhook(payload, signature) -> PaymentEvent   # M10; raises not_implemented in M9
 ```
 
-Rules:
+Implementations:
 
-- Create order only after policy + revalidation PASS.
-- LLM never sees keys or card data.
-- Webhook signatures verified server-side.
-- Idempotency key: `checkout_session_id + basket_version + action_type`.
-- Duplicate webhook → no second order, revenue, or conversion.
+- `StubPaymentProvider` — deterministic fake `order_stub_{CHK-…}` IDs. Preserves amount/currency. `fail=True` simulates provider outage. Used by automated tests. Never hits the network.
+- `RazorpayPaymentProvider` — Razorpay **Test Mode** via `httpx` (`POST https://api.razorpay.com/v1/orders`). Auth is `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` from the environment. The secret is never logged, persisted in code, or returned to clients.
 
-`StubPaymentProvider` for milestones before Razorpay.
+`PAYMENT_PROVIDER=stub|razorpay` selects the live process default. Tests inject `StubPaymentProvider`. An optional live Test Mode path runs only when `MARGINMIND_LIVE_RAZORPAY=1` and both keys are set.
+
+#### Checkout flow
+
+```
+request checkout
+  → load session + granted exact approval + exact basket version
+  → reject any caller amount/price/discounted total
+  → M8 revalidate_approved_basket (required PASS)
+  → amount_minor = catalogue live subtotal as integer paise
+  → idempotent CheckoutAttempt (CHK-001)
+  → provider create_order
+  → persist provider_order_id + Payment (PAY-001, not verified)
+  → return safe payload (key_id, order id, amount_minor, currency, CHK ref, merchant name)
+  → await payment result (M10 verifies)
+```
+
+If any step before `create_order` fails, no Razorpay order is created. Revalidation failure does not occupy the idempotency key, so a later restock can succeed.
+
+#### Amount authority
+
+The Razorpay amount is integer **minor units** from server-side basket/catalogue truth. Never floats. INR: ₹2,447 → `244700` paise (`Decimal` quantized to 0.01, then × 100). Caller `amount` / `price` / `discounted_total` / `amount_minor` is rejected even if it matches.
+
+#### Idempotency key
+
+```
+checkout:{session_ref}:{basket_ref}:v{version}:{approval_ref}
+```
+
+A repeated create-checkout for the same approved exact basket reuses the existing CheckoutAttempt and provider order when status is `ORDER_CREATED`, `CHECKOUT_PRESENTED`, `PAYMENT_REPORTED`, or `VERIFICATION_PENDING` and `amount_minor` still matches. `FAILED` attempts with the same key are retried in place after a new PASS. Duplicate requests must not create a second Razorpay order.
+
+#### CheckoutAttempt status (closed)
+
+`CREATED` · `REVALIDATION_REQUIRED` · `READY_FOR_PROVIDER` · `ORDER_CREATED` · `CHECKOUT_PRESENTED` · `PAYMENT_REPORTED` · `VERIFICATION_PENDING` · `VERIFIED` · `FAILED` · `CANCELLED`
+
+This is distinct from basket `CheckoutState`. M9 normally stops at `ORDER_CREATED` / `CHECKOUT_PRESENTED`. **M9 never writes `VERIFIED`.** A browser/client Razorpay callback is stored as `PAYMENT_REPORTED` or `VERIFICATION_PENDING` only. Webhook and signature verification are M10.
+
+HTTP (thin): `POST /api/v1/checkout`, `GET /api/v1/checkout/{ref_id}`, optional `POST /api/v1/checkout/{ref_id}/client-result`. Business logic is in `layers.checkout`.
 
 ### 6.9 Evidence / audit (`backend/app/layers/evidence/`)
 
 Every consequential decision points at evidence IDs, not at “the model said so”.
 
-Evidence examples: customer utterance, signal counts, basket snapshot, inventory row, policy check object, revalidation result (`REVAL-…`). M8 writes these for later Agent Trace; the trace UI is not built yet.
+Evidence examples: customer utterance, signal counts, basket snapshot, inventory row, policy check object, revalidation result (`REVAL-…`), checkout attempt (`CHK-…`). M8–M9 write these for later Agent Trace; the trace UI is not built yet.
 
 Audit events are **append-only**:
 
@@ -444,8 +478,10 @@ Only `VERIFIED` counts as a commercial success for metrics.
 | `agent_actions` | `ACT-001` | Proposed bounded actions (M6). Not authorization. |
 | `policy_decisions` | `PDEC-001` | Policy Engine verdict + typed checks (M7). Not execution. |
 | `revalidation_results` | `REVAL-001` | Final live re-check of an exact approved basket (M8). |
+| `checkout_attempts` | `CHK-001` | Idempotent checkout after revalidation PASS (M9). Amount in paise. |
+| `payments` | `PAY-001` | Provider order/payment row. `verified_at` is M10. |
 
-**Deferred:** `growth_opportunities`, `checkout_attempts`, `payments`, `webhook_events`, `campaigns`, `experiments`, `experiment_assignments`, `demand_clusters`.
+**Deferred:** `growth_opportunities`, `webhook_events`, `campaigns`, `experiments`, `experiment_assignments`, `demand_clusters`.
 
 Product commercial fields: name, category, description, base price, colour, material, fit, silhouette, length, stretch, coverage, occasion tags, style tags, margin band, margin percent, active. Inventory is never stored as AI metadata.
 
@@ -480,6 +516,8 @@ Traces, eval scenarios, and merchant UI should display `ref_id`, not UUIDs.
 | Agent action | `ACT-001` |
 | Policy decision | `PDEC-001` |
 | Revalidation | `REVAL-001` |
+| Checkout attempt | `CHK-001` |
+| Payment | `PAY-001` |
 
 Assign these in seed data and in application code when rows are created. Do not regenerate a `ref_id` after insert. Eval fixtures and the farewell demo session should use the same ID scheme so a judge can follow `SES-001` → `EVD-001` → `ACT-001` → `BASK-001@v2` on the trace page.
 
@@ -502,6 +540,16 @@ Assign these in seed data and in application code when rows are created. Do not 
 ### Revalidation status
 
 `PASS` · `FAILED` · `STOPPED`
+
+### Checkout attempt status
+
+`CREATED` · `REVALIDATION_REQUIRED` · `READY_FOR_PROVIDER` · `ORDER_CREATED` · `CHECKOUT_PRESENTED` · `PAYMENT_REPORTED` · `VERIFICATION_PENDING` · `VERIFIED` · `FAILED` · `CANCELLED`
+
+M9 stops at `ORDER_CREATED` / `CHECKOUT_PRESENTED`. Client-reported success is not `VERIFIED`.
+
+### Payment status
+
+`CREATED` · `REPORTED` · `VERIFICATION_PENDING` · `VERIFIED` · `FAILED`
 
 These live in `backend/app/schemas/vocabulary.py` so frontend, engine, eval, and audit share one contract.
 
@@ -535,9 +583,10 @@ MarginMind/
         basket/
         approval/            ← exact-version grant/reject; no execution
         revalidation/        ← M8 live re-check; approval ≠ success
+        checkout/            ← M9 attempt + state machine; no verified payment
         friction/
         evidence/
-        payments/
+        payments/            ← PaymentProvider; Stub + Razorpay Test Mode
       providers/llm/         ← LLMProvider protocol
     tests/
   eval/
@@ -559,11 +608,12 @@ No extra services. No frontend pages in M0. No dependency install in M0.
 | Policy Engine checks | Single demo merchant + demo customer |
 | Versioned basket + approval binding | Session auth (simple token / hardcoded demo login) |
 | Revalidation (including OOS stop) | LLM: Gemini free tier when wired; `StubLLMProvider` always available |
-| Evidence IDs + append-only audit | Payments until Razorpay milestone (`StubPaymentProvider`) |
+| Evidence IDs + append-only audit | `StubPaymentProvider` for automated tests; live Test Mode is opt-in |
 | Bounded actions including `NO_UPSELL` / `STOP` | Hero OOS: scripted stock drop on the approved SKU |
 | Hard-constraint catalogue filter | Conversational copy |
 | Eval harness scoring engines | Demand Gap / campaigns / experiments / Couple Mode / vibe / colour |
-| Webhook signature verify + idempotency **once Razorpay is wired** | Multi-merchant, production auth, email recovery |
+| Razorpay Test Mode order after revalidation PASS | Checkout.js widget / customer frontend (later) |
+| Webhook signature verify + idempotency **once M10 is wired** | Multi-merchant, production auth, email recovery |
 
 **Hybrid (recommended):** friction diagnosis is **rule-first** from recorded signals so Scene 3–5 cannot fail because the model hedged. LLM adds intent structure and language.
 
@@ -583,11 +633,10 @@ No extra services. No frontend pages in M0. No dependency install in M0.
 
 ## 13. What this milestone does not include
 
-- No running app, no installed dependencies
-- No Next.js pages, no shadcn components
-- No Razorpay keys or SDK
-- No Gemini / LLM vendor client (abstraction only)
-- No Alembic migrations yet
-- No stretch features
+- No customer frontend / Checkout.js widget
+- No webhook or signature verification (M10)
+- No marking payment `VERIFIED` from the browser
+- No Gemini / merchant dashboard / Agent Trace UI
+- No live/prod Razorpay keys in the repository
 
-Next: [BUILD_PLAN.md](./BUILD_PLAN.md).
+Next: [BUILD_PLAN.md](./BUILD_PLAN.md) — M10 webhook/signature verification. Do not start M10 without approval.

@@ -217,6 +217,10 @@ class ShoppingSession(Base):
     agent_actions: Mapped[list[AgentAction]] = relationship(back_populates="session")
     policy_decisions: Mapped[list[PolicyDecision]] = relationship(back_populates="session")
     revalidations: Mapped[list[RevalidationResult]] = relationship(back_populates="session")
+    checkout_attempts: Mapped[list["CheckoutAttempt"]] = relationship(
+        back_populates="session"
+    )
+    payments: Mapped[list["Payment"]] = relationship(back_populates="session")
 
 
 class SessionEvent(Base):
@@ -428,6 +432,60 @@ class RevalidationResult(Base):
 
     session: Mapped[ShoppingSession] = relationship(back_populates="revalidations")
     basket: Mapped[Basket | None] = relationship()
+
+
+class CheckoutAttempt(Base):
+    __tablename__ = "checkout_attempts"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    ref_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("shopping_sessions.id"), index=True)
+    basket_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("baskets.id"), index=True)
+    basket_ref_id: Mapped[str] = mapped_column(String(32), index=True)
+    basket_version: Mapped[int] = mapped_column(Integer)
+    approval_ref_id: Mapped[str] = mapped_column(String(32), index=True)
+    revalidation_ref_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    amount_minor: Mapped[int] = mapped_column(Integer)
+    currency: Mapped[str] = mapped_column(String(8), default="INR")
+    provider: Mapped[str] = mapped_column(String(32))
+    provider_order_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    session: Mapped[ShoppingSession] = relationship(back_populates="checkout_attempts")
+    basket: Mapped[Basket] = relationship()
+    payments: Mapped[list["Payment"]] = relationship(back_populates="checkout_attempt")
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    ref_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("shopping_sessions.id"), index=True)
+    checkout_attempt_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("checkout_attempts.id"), unique=True, index=True
+    )
+    provider: Mapped[str] = mapped_column(String(32))
+    provider_order_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    provider_payment_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    amount_minor: Mapped[int] = mapped_column(Integer)
+    currency: Mapped[str] = mapped_column(String(8), default="INR")
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    client_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    session: Mapped[ShoppingSession] = relationship(back_populates="payments")
+    checkout_attempt: Mapped[CheckoutAttempt] = relationship(back_populates="payments")
 
 
 class AuditEvent(Base):

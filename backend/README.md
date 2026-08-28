@@ -2,11 +2,21 @@
 
 Single Python service. Package boundaries are the architecture; they are not separate deploys.
 
-## Milestone 1
+## Milestone 9
 
-Relational commercial-truth layer: models, Alembic, seed catalogue, catalogue/inventory queries.
+Server-side Razorpay **Test Mode** order creation and a deterministic checkout state machine. A Razorpay order is created only after granted exact-version approval **and** M8 revalidation `PASS`. Amounts are integer paise from catalogue truth (₹2,447 → `244700`). Caller-supplied prices are rejected. Client “payment succeeded” is stored as `PAYMENT_REPORTED` / `VERIFICATION_PENDING` only — never `VERIFIED`. Webhook/signature verification is M10.
 
-Gemini is **not** integrated. `LLMProvider` remains an abstraction; `StubLLMProvider` is still the fallback.
+`PAYMENT_PROVIDER=stub` (default) or `razorpay`. Keys: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`. Automated tests inject `StubPaymentProvider` and do not need credentials. Optional live Test Mode: `MARGINMIND_LIVE_RAZORPAY=1`.
+
+HTTP:
+
+```
+POST /api/v1/checkout     { session_ref_id, approval_ref_id }  # no amount
+GET  /api/v1/checkout/{CHK-…}
+GET  /health
+```
+
+Idempotency key: `checkout:{session_ref}:{basket_ref}:v{version}:{approval_ref}`. Repeated requests reuse one provider order. Revalidation failure does not occupy the key. `FAILED` provider attempts are retried in place.
 
 ## Local setup
 
@@ -50,17 +60,20 @@ python -m app.db.seed
 
 | Path | Responsibility |
 | --- | --- |
-| `app/api/` | HTTP adapters |
+| `app/api/` | HTTP adapters (`POST/GET /api/v1/checkout`, `/health`) |
 | `app/core/` | Config, reference IDs, orchestrator (later) |
 | `app/db/` | Engine, sessions, Alembic, seed |
 | `app/models/` | SQLAlchemy commercial-truth tables |
 | `app/schemas/` | Closed vocabularies |
-| `app/engines/growth_decision/` | Friction → bounded proposed action (later) |
-| `app/engines/policy/` | Deterministic allow / block / approval (later) |
+| `app/engines/growth_decision/` | Friction → bounded proposed action |
+| `app/engines/policy/` | Deterministic allow / block / approval |
 | `app/layers/catalogue/` | Product/SKU/inventory truth |
-| `app/layers/basket/` | Versioned baskets and approvals |
+| `app/layers/basket/` | Versioned baskets |
+| `app/layers/approval/` | Exact-version grant; grant ≠ execute |
+| `app/layers/revalidation/` | Final live re-check; approval ≠ success |
+| `app/layers/checkout/` | CheckoutAttempt state machine; no verified payment |
 | `app/layers/evidence/` | Evidence packs and append-only audit |
-| `app/layers/payments/` | Payment provider interface |
+| `app/layers/payments/` | `PaymentProvider`; Stub + Razorpay Test Mode |
 | `app/providers/llm/` | `LLMProvider` protocol; Gemini free tier is the MVP live provider (not integrated yet); stub fallback |
 
 AI reasons. This service’s deterministic modules decide whether anything is allowed, executed, or verified.
