@@ -208,30 +208,10 @@ The hero system. It **proposes**; it does not execute.
 
 Inputs: intent, hard/soft preferences, session signals, catalogue candidates, current basket, merchant goal, offers (as data, not as permission).
 
-Outputs a `ProposedAction`:
-
-```json
-{
-  "friction": "BUDGET_MISMATCH",
-  "confidence": 0.94,
-  "proposed_action": "REBUILD_BASKET",
-  "reason": "...",
-  "evidence_ids": ["EVD-001", "EVD-002", "EVD-003"],
-  "candidate_skus": ["SKU-018-M"],
-  "requires_approval": true,
-  "what": "...",
-  "why": ["..."],
-  "fix": "..."
-}
-```
-
-Rules the engine must encode:
-
-- Closed action vocabulary only.
-- Confidence-aware: low/medium → `GUIDE_CONFIDENCE` / ask; high + low-risk → act within policy.
-- Price/budget rescue hierarchy: cheaper equivalent → rebuild basket → remove optional item → authorised offer → `NO_UPSELL` / `STOP`.
-- Discounting is late, never first.
-- Catalogue gap → do not hallucinate; record failed intent (minimal demand note is enough for MVP; full Demand Gap engine is stretch).
+- Outputs a `ProposedAction` (`ACT-001`) with WHAT / WHY / FIX. Status is **PROPOSED**. `requires_policy_check` is always true. The GDE does not authorize or execute.
+- Friction mapping: fit/colour → `GUIDE_CONFIDENCE`; style → `BUILD_BASKET` / `RECOMMEND`; budget → rescue then `REBUILD_BASKET`; price → cheaper SKU before any offer; OOS/size → `FIND_ALTERNATIVE`; overload → `SIMPLIFY_CHOICES` (≤3); incomplete → `BUILD_BASKET`; gap/unknown/none → `STOP`; attach past HARD budget → `NO_UPSELL`.
+- Rescue hierarchy: cheaper equivalent → rebuild look → remove optional accessory → seeded offer (price hesitation only, never invented) → `NO_UPSELL` / `STOP`.
+- Does not mutate baskets, inventory, or approvals.
 
 **Demo reliability decision:** classify obvious friction with deterministic rules from signals (size-guide count, budget vs basket, OOS, hard-budget attach). Use the LLM only to fill structured intent and copy. Judges must see the pipeline even if the model is down.
 
@@ -418,8 +398,9 @@ Only `VERIFIED` counts as a commercial success for metrics.
 | `evidence` | `EVD-001` | Evidence packs |
 | `audit_events` | `AUD-001` | Append-only trace |
 | `friction_diagnoses` | `FRIC-001` | Rule-first friction + evidence refs (M5) |
+| `agent_actions` | `ACT-001` | Proposed bounded actions (M6). Not authorization. |
 
-**Deferred (not in M1):** `growth_opportunities`, `agent_actions`, `checkout_attempts`, `payments`, `webhook_events`, `campaigns`, `experiments`, `experiment_assignments`, `demand_clusters`.
+**Deferred:** `growth_opportunities`, `checkout_attempts`, `payments`, `webhook_events`, `campaigns`, `experiments`, `experiment_assignments`, `demand_clusters`.
 
 Product commercial fields: name, category, description, base price, colour, material, fit, silhouette, length, stretch, coverage, occasion tags, style tags, margin band, margin percent, active. Inventory is never stored as AI metadata.
 
@@ -451,6 +432,7 @@ Traces, eval scenarios, and merchant UI should display `ref_id`, not UUIDs.
 | Evidence record | `EVD-001` |
 | Friction diagnosis | `FRIC-001` |
 | Audit event | `AUD-001` |
+| Agent action | `ACT-001` |
 
 Assign these in seed data and in application code when rows are created. Do not regenerate a `ref_id` after insert. Eval fixtures and the farewell demo session should use the same ID scheme so a judge can follow `SES-001` → `EVD-001` → `ACT-001` → `BASK-001@v2` on the trace page.
 
@@ -495,7 +477,7 @@ MarginMind/
       models/                ← SQLAlchemy
       schemas/               ← Pydantic + shared vocabulary
       engines/
-        growth_decision/
+        growth_decision/     ← M6 proposes; does not authorize
         policy/
       layers/
         catalogue/

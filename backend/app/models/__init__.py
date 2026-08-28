@@ -2,6 +2,7 @@
 
 from app.models.tables import (
     Approval,
+    AgentAction,
     AuditEvent,
     Basket,
     BasketItem,
@@ -22,6 +23,7 @@ from app.models.tables import (
 
 __all__ = [
     "Approval",
+    "AgentAction",
     "AuditEvent",
     "Basket",
     "BasketItem",

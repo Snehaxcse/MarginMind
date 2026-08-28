@@ -214,6 +214,7 @@ class ShoppingSession(Base):
     friction_diagnoses: Mapped[list[FrictionDiagnosis]] = relationship(
         back_populates="session"
     )
+    agent_actions: Mapped[list[AgentAction]] = relationship(back_populates="session")
 
 
 class SessionEvent(Base):
@@ -344,6 +345,34 @@ class FrictionDiagnosis(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     session: Mapped[ShoppingSession] = relationship(back_populates="friction_diagnoses")
+
+
+class AgentAction(Base):
+    __tablename__ = "agent_actions"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    ref_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("shopping_sessions.id"), index=True)
+    friction_ref_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    reason: Mapped[str] = mapped_column(Text)
+    reason_codes: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    evidence_ref_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    candidate_skus: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    offer_ref_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3))
+    requires_policy_check: Mapped[bool] = mapped_column(Boolean, default=True)
+    requires_customer_approval: Mapped[bool] = mapped_column(Boolean, default=False)
+    potential_revenue_not_pursued: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
+    what: Mapped[str] = mapped_column(Text, default="")
+    why: Mapped[str] = mapped_column(Text, default="")
+    fix: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(32), default="PROPOSED")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    session: Mapped[ShoppingSession] = relationship(back_populates="agent_actions")
 
 
 class AuditEvent(Base):

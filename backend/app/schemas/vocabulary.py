@@ -38,6 +38,17 @@ class FrictionType(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class ActionStatus(str, Enum):
+    PROPOSED = "PROPOSED"
+    BLOCKED = "BLOCKED"
+    APPROVAL_REQUIRED = "APPROVAL_REQUIRED"
+    APPROVED = "APPROVED"
+    EXECUTED = "EXECUTED"
+    VERIFIED = "VERIFIED"
+    FAILED = "FAILED"
+    STOPPED = "STOPPED"
+
+
 class AutonomyLevel(str, Enum):
     AUTO = "AUTO"
     APPROVAL_REQUIRED = "APPROVAL_REQUIRED"

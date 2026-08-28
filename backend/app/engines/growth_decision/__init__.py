@@ -1,7 +1,16 @@
 """Growth Decision Engine.
 
-Maps intent, session signals, catalogue candidates, and basket state to a
-single bounded ProposedAction with evidence ids.
-
-Does not execute, take payment, mutate inventory, or override policy.
+Proposes a single bounded action. Does not authorize, execute, or mutate baskets.
 """
+
+from app.engines.growth_decision.engine import (
+    DEMO_ATTACH_SKU,
+    list_agent_actions,
+    propose_growth_action,
+)
+
+__all__ = [
+    "DEMO_ATTACH_SKU",
+    "list_agent_actions",
+    "propose_growth_action",
+]

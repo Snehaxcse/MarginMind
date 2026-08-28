@@ -22,6 +22,7 @@ class RefPrefix:
     EVENT = "EVT"
     PREFERENCE = "PREF"
     FRICTION = "FRIC"
+    ACTION = "ACT"
 
 
 def format_ref_id(prefix: str, n: int, *, suffix: str | None = None) -> str:

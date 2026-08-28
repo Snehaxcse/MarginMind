@@ -189,20 +189,13 @@ Typed session signals (`EVT-…` + `EVD-…`), deterministic friction resolver, 
 
 ## M6 — Growth Decision Engine
 
-**Goal:** Smallest valid **proposed** action; including `NO_UPSELL` and `STOP`.
+**Status:** complete.
 
-**In scope**
+Deterministic friction → bounded `ProposedAction` (`ACT-…`), WHAT/WHY/FIX, rescue hierarchy, `NO_UPSELL` / `STOP`. Proposal is not permission. No Gemini, no Policy Engine runtime, no basket mutation.
 
-- Map friction → candidate actions (spec §17 table).
-- Price/budget rescue hierarchy (spec §22).
-- Closed `BoundedAction` vocabulary only.
-- Emit `ProposedAction` with what/why/fix fields pointing at evidence ids.
-- Confidence rule: low/medium → guide/ask, not discount.
+**Out of scope (held)**
 
-**Out of scope**
-
-- Policy module internals (call a temporary “always PASS” only if needed for wiring; prefer to land M7 immediately after).
-- Execution, payments.
+- Policy module internals, execution, payments.
 
 **Test**
 
@@ -469,6 +462,6 @@ Typed session signals (`EVT-…` + `EVD-…`), deterministic friction resolver, 
 
 ## Proposed next milestone after approval
 
-**M6 — Growth Decision Engine.**
+**M7 — Policy Engine.**
 
-Smallest valid proposed action from diagnosed friction, including `NO_UPSELL` and `STOP`. Do not start M6 without approval.
+Deterministic `validate_action` over database-backed commercial context. Do not start M7 without approval.

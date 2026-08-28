@@ -1,5 +1,6 @@
 """Pydantic request/response models and closed vocabularies."""
 
+from app.schemas.action import ProposedAction
 from app.schemas.basket import (
     AddOnEvaluation,
     BasketValidationResult,
@@ -14,6 +15,7 @@ from app.schemas.friction import (
 )
 from app.schemas.intent import BudgetIntent, IntentExtractionResult, ShopperIntent
 from app.schemas.vocabulary import (
+    ActionStatus,
     Actor,
     AutonomyLevel,
     BoundedAction,
@@ -31,6 +33,7 @@ from app.schemas.vocabulary import (
 )
 
 __all__ = [
+    "ActionStatus",
     "Actor",
     "AddOnEvaluation",
     "AutonomyLevel",
@@ -52,6 +55,7 @@ __all__ = [
     "PolicyValueType",
     "PolicyVerdict",
     "ProductCategory",
+    "ProposedAction",
     "ReplacementProposal",
     "SessionEventType",
     "SessionSignalInput",
