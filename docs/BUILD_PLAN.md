@@ -104,7 +104,11 @@ HARD `CatalogueConstraints` exclude candidates before any ranking. SOFT `SoftCat
 
 ## M3 — Session, intent schema, stub LLM provider
 
-**Goal:** Ambiguous language becomes a structured object via `LLMProvider`, without coupling the pipeline to Gemini yet.
+**Status:** complete.
+
+Customer message → session event + evidence → `StubLLMProvider` → validated `IntentExtractionResult` → persisted `INT-…` → HARD/SOFT catalogue mapping → eligible real SKUs.
+
+Unknown utterances stay unknown. Provider errors do not persist a fake intent. Gemini is not integrated. Basket-total budget is not enforced here.
 
 **In scope**
 
@@ -461,8 +465,8 @@ HARD `CatalogueConstraints` exclude candidates before any ranking. SOFT `SoftCat
 
 ## Proposed next milestone after approval
 
-**M3 — Session, intent schema, stub LLM provider.**
+**M4 — Basket Architect (deterministic).**
 
-Still no Gemini SDK. Structured `Intent` + `StubLLMProvider` + session `ref_id`s (`SES-001`).
+Complete looks from real SKUs with **basket-total** hard-budget enforcement. Item-level `max_price` from M2/M3 is not that check.
 
-Do not start M3 without approval.
+Do not start M4 without approval.

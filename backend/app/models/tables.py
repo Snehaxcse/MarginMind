@@ -220,7 +220,9 @@ class SessionEvent(Base):
     ref_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("shopping_sessions.id"), index=True)
     event_type: Mapped[str] = mapped_column(String(64), index=True)
+    actor: Mapped[str] = mapped_column(String(64), default="system")
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    evidence_ref_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     session: Mapped[ShoppingSession] = relationship(back_populates="events")
@@ -232,17 +234,29 @@ class Intent(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     ref_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("shopping_sessions.id"), index=True)
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("customers.id"), nullable=True, index=True
+    )
     occasion: Mapped[str | None] = mapped_column(String(64), nullable=True)
     budget_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     budget_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     height: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    usual_size: Mapped[str | None] = mapped_column(String(16), nullable=True)
     fit_preferences: Mapped[list[str]] = mapped_column(JSONB, default=list)
     style_preferences: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    colour_preferences: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    excluded_materials: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    excluded_coverage: Mapped[list[str]] = mapped_column(JSONB, default=list)
     goal: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    confidence: Mapped[Decimal | None] = mapped_column(Numeric(4, 3), nullable=True)
+    evidence_ref_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    missing_fields: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    ambiguities: Mapped[list[str]] = mapped_column(JSONB, default=list)
     raw_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     session: Mapped[ShoppingSession] = relationship(back_populates="intents")
+    customer: Mapped[Customer | None] = relationship()
 
 
 class Basket(Base):

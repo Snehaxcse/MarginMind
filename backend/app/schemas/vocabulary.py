@@ -54,6 +54,27 @@ class ConstraintKind(str, Enum):
     SOFT = "SOFT"
 
 
+class BudgetType(str, Enum):
+    HARD = "HARD"
+    FLEXIBLE = "FLEXIBLE"
+
+
+class Actor(str, Enum):
+    CUSTOMER = "customer"
+    MERCHANT = "merchant"
+    SYSTEM = "system"
+
+
+class SessionEventType(str, Enum):
+    CUSTOMER_MESSAGE = "customer_message"
+    INTENT_EXTRACTED = "intent_extracted"
+    PROVIDER_FAILED = "provider_failed"
+
+
+class EvidenceKind(str, Enum):
+    CUSTOMER_MESSAGE = "customer_message"
+
+
 class PolicyCode(str, Enum):
     RESPECT_HARD_BUDGET = "RESPECT_HARD_BUDGET"
     ONLY_REAL_INVENTORY = "ONLY_REAL_INVENTORY"

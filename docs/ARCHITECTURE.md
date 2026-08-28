@@ -193,6 +193,8 @@ complete_structured(schema_name, instructions, input_payload) -> dict
 
 The orchestrator **validates** that dict with Pydantic. Invalid or schema-violating output → `STOP` / ask, never a commercial action.
 
+M3 implements `StubLLMProvider` for `schema_name=intent_extraction` only. Gemini is still not integrated.
+
 Implementations (swap via config, e.g. `LLM_PROVIDER=gemini|stub`):
 
 1. `StubLLMProvider` — deterministic fixtures for demo, eval, and outage fallback. **Build first.**
@@ -273,6 +275,7 @@ Source of product truth.
 
 - Products + variants + stock + fashion metadata (fit, silhouette, length, occasion/style tags, margin band).
 - Retrieval pipeline: **hard filters first** via `CatalogueConstraints` (budget, size, in-stock, merchant, restricted SKUs/products, excluded material/coverage/fit/silhouette, inactive rows). Unknown SKU / unknown merchant / malformed tokens fail closed.
+- A HARD customer budget may be copied to `max_price` as a **per-item candidate ceiling only**. Basket-total enforcement belongs to the later basket/policy layer.
 - `SoftCatalogueSignals` (colour, silhouette, fit, style, occasion) are ranking hints only and **never exclude** a candidate.
 - One-size variants (`OS`) stay eligible under `required_size` unless `allow_one_size=False`.
 - Revalidation reads live stock and price, not the recommendation cache.
