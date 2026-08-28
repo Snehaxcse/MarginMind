@@ -272,7 +272,9 @@ Autonomy (spec §24):
 Source of product truth.
 
 - Products + variants + stock + fashion metadata (fit, silhouette, length, occasion/style tags, margin band).
-- Retrieval pipeline: **hard filters first** (budget, size, in-stock, restricted, coverage constraints) → then rank.
+- Retrieval pipeline: **hard filters first** via `CatalogueConstraints` (budget, size, in-stock, merchant, restricted SKUs/products, excluded material/coverage/fit/silhouette, inactive rows). Unknown SKU / unknown merchant / malformed tokens fail closed.
+- `SoftCatalogueSignals` (colour, silhouette, fit, style, occasion) are ranking hints only and **never exclude** a candidate.
+- One-size variants (`OS`) stay eligible under `required_size` unless `allow_one_size=False`.
 - Revalidation reads live stock and price, not the recommendation cache.
 - The model cannot insert SKUs.
 

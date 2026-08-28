@@ -84,15 +84,9 @@ Buffer lives in Day 5. If something slips, **cut UI chrome before cutting Policy
 
 ## M2 — Catalogue retrieval with hard filters
 
-**Goal:** The model cannot be the catalogue.
+**Status:** complete.
 
-**Already landed in M1:** SKU lookup, in-stock listing, category/size/price-ceiling/tag filters, unknown SKU fails closed.
-
-**Remaining in M2**
-
-- Restricted-SKU exclusion from merchant policy/data
-- Explicit HARD customer constraints as catalogue filters (e.g. coverage / no sleeveless) once those constraints exist on the session
-- Keep retrieval deterministic; still no AI ranking
+HARD `CatalogueConstraints` exclude candidates before any ranking. SOFT `SoftCatalogueSignals` are accepted and never used to exclude. Restricted SKUs/products, materials, coverage, inactive rows, OOS, budget, required size, and unknown merchant/SKU all fail closed. One-size (`OS`) accessories remain eligible when `required_size` is set unless `allow_one_size=False`.
 
 **Out of scope**
 
@@ -467,6 +461,8 @@ Buffer lives in Day 5. If something slips, **cut UI chrome before cutting Policy
 
 ## Proposed next milestone after approval
 
-**M2 — remaining hard-constraint catalogue filters** (restricted SKUs, HARD coverage constraints), unless you prefer to skip to **M3 — session + stub LLM**.
+**M3 — Session, intent schema, stub LLM provider.**
 
-M1 is the commercial-truth foundation. Do not start M2 without approval.
+Still no Gemini SDK. Structured `Intent` + `StubLLMProvider` + session `ref_id`s (`SES-001`).
+
+Do not start M3 without approval.

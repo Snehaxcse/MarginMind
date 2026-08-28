@@ -76,15 +76,17 @@ def test_catalogue_returns_only_seeded_products(db: Session) -> None:
     assert {item.ref_id for item in listed} <= allowed_skus
 
 
-def test_category_and_tag_filters(db: Session) -> None:
+def test_category_filter_is_scope_not_style(db: Session) -> None:
     dresses = list_available_variants(db, category=ProductCategory.DRESSES.value)
     assert dresses
     assert all(item.product.category == ProductCategory.DRESSES.value for item in dresses)
-    farewell = list_available_variants(db, occasion_tag="farewell")
-    assert "SKU-001-M" in {item.ref_id for item in farewell}
-    elegant = list_available_variants(db, style_tag="elegant")
-    assert elegant
-    assert all("elegant" in item.product.style_tags for item in elegant)
+    # Occasion/style kwargs are SOFT and must not shrink the size-M set.
+    size_m = {item.ref_id for item in list_available_variants(db, size="M")}
+    tagged = {
+        item.ref_id
+        for item in list_available_variants(db, size="M", occasion_tag="farewell", style_tag="elegant")
+    }
+    assert size_m == tagged
 
 
 def test_price_override_used_for_ceiling(db: Session) -> None:
