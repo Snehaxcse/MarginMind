@@ -159,6 +159,7 @@ class EvidenceKind(str, Enum):
     REVALIDATION = "revalidation"
     REPLACEMENT_PROPOSAL = "replacement_proposal"
     CHECKOUT = "checkout"
+    WEBHOOK = "webhook"
 
 
 class PolicyCode(str, Enum):
@@ -229,6 +230,18 @@ class PaymentStatus(str, Enum):
 
     CREATED = "CREATED"
     REPORTED = "REPORTED"
+    AUTHORIZED = "AUTHORIZED"
     VERIFICATION_PENDING = "VERIFICATION_PENDING"
     VERIFIED = "VERIFIED"
+    FAILED = "FAILED"
+
+
+class WebhookProcessingStatus(str, Enum):
+    """Webhook delivery handling. Distinct from PaymentStatus."""
+
+    RECEIVED = "RECEIVED"
+    VERIFIED_SIGNATURE = "VERIFIED_SIGNATURE"
+    PROCESSED = "PROCESSED"
+    DUPLICATE = "DUPLICATE"
+    IGNORED = "IGNORED"
     FAILED = "FAILED"

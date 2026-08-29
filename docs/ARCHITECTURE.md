@@ -1,7 +1,7 @@
 # MarginMind Architecture
 
-**Milestone:** 9 — Razorpay Test Mode order + checkout state machine  
-**Status:** M0–M9 implemented. Client checkout success is not verified payment.  
+**Milestone:** 10 — Razorpay webhook verification + idempotent payment verification  
+**Status:** M0–M10 implemented. Client checkout success is not verified payment.  
 **Authoritative product spec:** [MarginMind — Product & Build Specification.md](./MarginMind%20—%20Product%20%26%20Build%20Specification.md)
 
 This document describes a **5-day Buildathon architecture**. It optimises for a reliable live demo of the locked MVP, not for a production multi-service platform.
@@ -333,15 +333,45 @@ Application code depends on `PaymentProvider`, not on Razorpay SDK or HTTP detai
 
 ```
 PaymentProvider.create_order(amount_minor, currency, receipt, notes, idempotency_key) -> PaymentOrder
-PaymentProvider.verify_webhook(payload, signature) -> PaymentEvent   # M10; raises not_implemented in M9
+PaymentProvider.verify_webhook(raw_body_bytes, signature) -> VerifiedWebhookEnvelope
+PaymentProvider.fetch_payment(provider_payment_id) -> PaymentSnapshot   # optional recovery; tests use stub
 ```
+
+HMAC is computed over the **exact raw HTTP body bytes** with `RAZORPAY_WEBHOOK_SECRET` (never `RAZORPAY_KEY_SECRET`). Algorithm: HMAC-SHA256, hex digest, `hmac.compare_digest`. JSON is parsed **only after** the signature matches. Re-serializing parsed JSON and hashing that string is incorrect and will fail.
+
+Header `X-Razorpay-Signature` is required. `x-razorpay-event-id` is the idempotency key (fallback: `sha256:{raw_body_hash}`).
 
 Implementations:
 
-- `StubPaymentProvider` — deterministic fake `order_stub_{CHK-…}` IDs. Preserves amount/currency. `fail=True` simulates provider outage. Used by automated tests. Never hits the network.
-- `RazorpayPaymentProvider` — Razorpay **Test Mode** via `httpx` (`POST https://api.razorpay.com/v1/orders`). Auth is `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` from the environment. The secret is never logged, persisted in code, or returned to clients.
+- `StubPaymentProvider` — deterministic fake `order_stub_{CHK-…}` IDs. Signs/verifies Razorpay-shaped fixtures with `webhook_secret`. `fail=True` simulates provider outage. Used by automated tests. Never hits the network.
+- `RazorpayPaymentProvider` — Razorpay **Test Mode** via `httpx`. Order create uses `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`. Webhook verify uses `RAZORPAY_WEBHOOK_SECRET` only.
 
-`PAYMENT_PROVIDER=stub|razorpay` selects the live process default. Tests inject `StubPaymentProvider`. An optional live Test Mode path runs only when `MARGINMIND_LIVE_RAZORPAY=1` and both keys are set.
+#### Webhook delivery (at-least-once)
+
+```
+POST /api/v1/webhooks/razorpay
+  → read raw body
+  → HMAC verify
+  → persist webhook_events (WHK-001)
+  → correlate provider_order_id + amount_minor + currency + provider
+  → apply commercial effect at most once
+```
+
+Closed webhook processing statuses (distinct from payment status): `RECEIVED` · `VERIFIED_SIGNATURE` · `PROCESSED` · `DUPLICATE` · `IGNORED` · `FAILED`.
+
+A valid signature does **not** mean payment `VERIFIED`. It only proves the delivery came from the provider.
+
+Supported events: `payment.authorized` (intermediate `AUTHORIZED`, not verified), `payment.captured` and `order.paid` (may `VERIFIED`), `payment.failed` (FAILED unless already VERIFIED). Other signed events are persisted as `IGNORED` with HTTP 2xx.
+
+Events may arrive out of order. Transitions are monotonic: `VERIFIED` is never downgraded. `payment.captured` then `payment.authorized` keeps `VERIFIED`. `payment.captured` then `order.paid` persist two webhook rows and one commercial verification. A later genuine `payment.captured` may upgrade a prior `FAILED` / client-abandon state.
+
+Duplicate `x-razorpay-event-id` + same SHA-256 body hash → `DUPLICATE`, HTTP 2xx, no second Payment, no second `payment_verified` audit. Same event id + different body → `EVENT_ID_BODY_CONFLICT`, HTTP 409, no further commercial effect.
+
+Amount `244700` vs webhook `200000` → `PAYMENT_AMOUNT_MISMATCH`, not `VERIFIED`. Currency must be `INR`. Unknown `provider_order_id` is not attached to another checkout.
+
+HTTP (thin): `POST /api/v1/checkout`, `GET /api/v1/checkout/{ref_id}`, `POST /api/v1/checkout/{ref_id}/client-result` (still cannot write `VERIFIED`), `POST /api/v1/webhooks/razorpay`. Business logic is in `layers.checkout` / `layers.payments`.
+
+Invalid/missing signature: HTTP 4xx, webhook row `signature_valid=false`, no payment mutation. Internal errors: non-2xx so Razorpay may retry.
 
 #### Checkout flow
 
@@ -376,15 +406,13 @@ A repeated create-checkout for the same approved exact basket reuses the existin
 
 `CREATED` · `REVALIDATION_REQUIRED` · `READY_FOR_PROVIDER` · `ORDER_CREATED` · `CHECKOUT_PRESENTED` · `PAYMENT_REPORTED` · `VERIFICATION_PENDING` · `VERIFIED` · `FAILED` · `CANCELLED`
 
-This is distinct from basket `CheckoutState`. M9 normally stops at `ORDER_CREATED` / `CHECKOUT_PRESENTED`. **M9 never writes `VERIFIED`.** A browser/client Razorpay callback is stored as `PAYMENT_REPORTED` or `VERIFICATION_PENDING` only. Webhook and signature verification are M10.
-
-HTTP (thin): `POST /api/v1/checkout`, `GET /api/v1/checkout/{ref_id}`, optional `POST /api/v1/checkout/{ref_id}/client-result`. Business logic is in `layers.checkout`.
+This is distinct from basket `CheckoutState`. Order creation (M9) stops at `ORDER_CREATED` / `CHECKOUT_PRESENTED`. A browser callback is `PAYMENT_REPORTED` / `VERIFICATION_PENDING` only. **Only a signature-valid captured/paid webhook (or optional server fetch) may write `VERIFIED`.**
 
 ### 6.9 Evidence / audit (`backend/app/layers/evidence/`)
 
 Every consequential decision points at evidence IDs, not at “the model said so”.
 
-Evidence examples: customer utterance, signal counts, basket snapshot, inventory row, policy check object, revalidation result (`REVAL-…`), checkout attempt (`CHK-…`). M8–M9 write these for later Agent Trace; the trace UI is not built yet.
+Evidence examples: customer utterance, signal counts, basket snapshot, inventory row, policy check object, revalidation result (`REVAL-…`), checkout attempt (`CHK-…`), webhook delivery (`WHK-…`). M8–M10 write these for later Agent Trace; the trace UI is not built yet.
 
 Audit events are **append-only**:
 
@@ -479,9 +507,10 @@ Only `VERIFIED` counts as a commercial success for metrics.
 | `policy_decisions` | `PDEC-001` | Policy Engine verdict + typed checks (M7). Not execution. |
 | `revalidation_results` | `REVAL-001` | Final live re-check of an exact approved basket (M8). |
 | `checkout_attempts` | `CHK-001` | Idempotent checkout after revalidation PASS (M9). Amount in paise. |
-| `payments` | `PAY-001` | Provider order/payment row. `verified_at` is M10. |
+| `payments` | `PAY-001` | Provider order/payment row. `verified_at` set only by M10. |
+| `webhook_events` | `WHK-001` | Raw-body HMAC delivery log. Unique `(provider, provider_event_id)`. |
 
-**Deferred:** `growth_opportunities`, `webhook_events`, `campaigns`, `experiments`, `experiment_assignments`, `demand_clusters`.
+**Deferred:** `growth_opportunities`, `campaigns`, `experiments`, `experiment_assignments`, `demand_clusters`.
 
 Product commercial fields: name, category, description, base price, colour, material, fit, silhouette, length, stretch, coverage, occasion tags, style tags, margin band, margin percent, active. Inventory is never stored as AI metadata.
 
@@ -518,6 +547,7 @@ Traces, eval scenarios, and merchant UI should display `ref_id`, not UUIDs.
 | Revalidation | `REVAL-001` |
 | Checkout attempt | `CHK-001` |
 | Payment | `PAY-001` |
+| Webhook event | `WHK-001` |
 
 Assign these in seed data and in application code when rows are created. Do not regenerate a `ref_id` after insert. Eval fixtures and the farewell demo session should use the same ID scheme so a judge can follow `SES-001` → `EVD-001` → `ACT-001` → `BASK-001@v2` on the trace page.
 
@@ -545,11 +575,19 @@ Assign these in seed data and in application code when rows are created. Do not 
 
 `CREATED` · `REVALIDATION_REQUIRED` · `READY_FOR_PROVIDER` · `ORDER_CREATED` · `CHECKOUT_PRESENTED` · `PAYMENT_REPORTED` · `VERIFICATION_PENDING` · `VERIFIED` · `FAILED` · `CANCELLED`
 
-M9 stops at `ORDER_CREATED` / `CHECKOUT_PRESENTED`. Client-reported success is not `VERIFIED`.
+M9 creates the order. M10 may write `VERIFIED` only from captured/paid provider evidence.
 
 ### Payment status
 
-`CREATED` · `REPORTED` · `VERIFICATION_PENDING` · `VERIFIED` · `FAILED`
+`CREATED` · `REPORTED` · `AUTHORIZED` · `VERIFICATION_PENDING` · `VERIFIED` · `FAILED`
+
+`payment.authorized` → `AUTHORIZED`. `payment.captured` / `order.paid` → `VERIFIED`. Browser callback never writes `VERIFIED`.
+
+### Webhook processing status
+
+`RECEIVED` · `VERIFIED_SIGNATURE` · `PROCESSED` · `DUPLICATE` · `IGNORED` · `FAILED`
+
+Signature-valid ≠ payment verified.
 
 These live in `backend/app/schemas/vocabulary.py` so frontend, engine, eval, and audit share one contract.
 
@@ -583,7 +621,7 @@ MarginMind/
         basket/
         approval/            ← exact-version grant/reject; no execution
         revalidation/        ← M8 live re-check; approval ≠ success
-        checkout/            ← M9 attempt + state machine; no verified payment
+        checkout/            ← M9 attempt; M10 webhook apply; client ≠ verified
         friction/
         evidence/
         payments/            ← PaymentProvider; Stub + Razorpay Test Mode
@@ -613,7 +651,7 @@ No extra services. No frontend pages in M0. No dependency install in M0.
 | Hard-constraint catalogue filter | Conversational copy |
 | Eval harness scoring engines | Demand Gap / campaigns / experiments / Couple Mode / vibe / colour |
 | Razorpay Test Mode order after revalidation PASS | Checkout.js widget / customer frontend (later) |
-| Webhook signature verify + idempotency **once M10 is wired** | Multi-merchant, production auth, email recovery |
+| Webhook HMAC + idempotent captured/paid verification | Multi-merchant, production auth, email recovery |
 
 **Hybrid (recommended):** friction diagnosis is **rule-first** from recorded signals so Scene 3–5 cannot fail because the model hedged. LLM adds intent structure and language.
 
@@ -634,9 +672,9 @@ No extra services. No frontend pages in M0. No dependency install in M0.
 ## 13. What this milestone does not include
 
 - No customer frontend / Checkout.js widget
-- No webhook or signature verification (M10)
 - No marking payment `VERIFIED` from the browser
 - No Gemini / merchant dashboard / Agent Trace UI
 - No live/prod Razorpay keys in the repository
+- No refunds or subscriptions
 
-Next: [BUILD_PLAN.md](./BUILD_PLAN.md) — M10 webhook/signature verification. Do not start M10 without approval.
+Next: [BUILD_PLAN.md](./BUILD_PLAN.md) — Customer Copilot UI (proposed M11). Do not start M11 without approval.

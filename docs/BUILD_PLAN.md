@@ -299,27 +299,42 @@ approved exact basket → live revalidation PASS → CheckoutAttempt (CHK-…)
 
 ## M10 — Webhook + signature verification
 
+**Status:** complete.
+
 **Goal:** Independent verification of money movement. A browser “payment succeeded” is not commercial truth.
+
+```
+client may report → VERIFICATION_PENDING
+  → POST /api/v1/webhooks/razorpay
+  → HMAC-SHA256(raw body, RAZORPAY_WEBHOOK_SECRET)
+  → persist WHK-… (dedupe on x-razorpay-event-id)
+  → correlate order/amount/currency
+  → payment.captured | order.paid → VERIFIED (once)
+```
 
 **In scope**
 
-- `verify_webhook` on `RazorpayPaymentProvider`: HMAC signature, normalized event.
-- Idempotent `webhook_events` processing. Duplicate delivery does not double-count.
-- Transition CheckoutAttempt/Payment to `VERIFIED` only after cryptographic/server proof.
-- Fetch payment from Razorpay if webhook delivery is delayed (demo kill-switch still must not trust the client alone).
+- Raw-body HMAC. `X-Razorpay-Signature`. Constant-time compare. Do not parse JSON first.
+- `RAZORPAY_WEBHOOK_SECRET` distinct from `RAZORPAY_KEY_SECRET`.
+- `webhook_events` (`WHK-001`). Statuses: RECEIVED, VERIFIED_SIGNATURE, PROCESSED, DUPLICATE, IGNORED, FAILED.
+- Supported: `payment.authorized` (not verified), `payment.captured` / `order.paid` (may verify), `payment.failed` (never downgrades VERIFIED).
+- Amount/currency/order correlation. SHA-256 of raw body. Unique provider payment id.
+- Optional stub `fetch_payment` recovery path. Automated tests stay offline.
 
 **Out of scope**
 
-- Live/prod keys. Refunds. Subscriptions. Customer frontend.
+- Live/prod keys. Refunds. Subscriptions. Customer frontend. Agent Trace UI.
 
 **Test**
 
-- Valid test-mode webhook → one verified payment + audit event.
-- Replay → one payment row.
-- Invalid signature → ignored, not verified.
-- LLM/backend logs contain no key material.
+- Hero checkout + client success → not VERIFIED; signed `payment.captured` → VERIFIED once.
+- Invalid/missing signature, amount 200000 vs 244700, unknown order, duplicate event id, captured then authorized, captured then order.paid, failed then captured, unsupported event.
 
-Do not start M10 without approval.
+**Commit**
+
+- Webhook verification + `webhook_events` + tests.
+
+Do not start M11 without approval.
 
 ---
 
@@ -453,7 +468,7 @@ Razorpay Test Mode **order creation** is M9. **Webhook/signature verification** 
 
 ## Proposed next milestone after approval
 
-**M10 — Webhook + signature verification.**
+**M11 — Customer Copilot UI.**
 
-Verify Razorpay Test Mode payments server-side. Client checkout success remains untrusted. Do not start M10 without approval. Do not build the customer frontend in M10.
+Payment truth is complete (order create + webhook verify). Build the customer surface that calls M7–M10, including Checkout.js against the M9 payload. Webhooks remain the source of `VERIFIED`. Do not start M11 without approval. Do not treat the widget callback as paid.
 

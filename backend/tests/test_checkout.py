@@ -153,9 +153,12 @@ def test_stub_payment_provider_works_offline() -> None:
     assert order.provider_order_id == "order_stub_CHK-001"
     assert order.amount_minor == HERO_PAISE
     assert order.currency == "INR"
+    body = b'{"event":"payment.captured","payload":{"payment":{"entity":{"id":"pay_x","amount":244700,"currency":"INR","status":"captured","order_id":"order_stub_CHK-001"}}}}'
+    envelope = stub.verify_webhook(payload=body, signature=stub.sign_webhook(body))
+    assert envelope.event_type == "payment.captured"
     with pytest.raises(PaymentProviderError) as exc:
-        stub.verify_webhook(payload=b"{}", signature="x")
-    assert exc.value.code == "not_implemented"
+        stub.verify_webhook(payload=body, signature="deadbeef")
+    assert exc.value.code == "invalid_signature"
 
 
 def test_razorpay_provider_requires_env_keys() -> None:

@@ -27,6 +27,7 @@ class RefPrefix:
     REVALIDATION = "REVAL"
     CHECKOUT = "CHK"
     PAYMENT = "PAY"
+    WEBHOOK = "WHK"
 
 
 def format_ref_id(prefix: str, n: int, *, suffix: str | None = None) -> str:

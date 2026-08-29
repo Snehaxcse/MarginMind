@@ -45,6 +45,7 @@ from app.schemas.vocabulary import (
     RevalidationCheckName,
     RevalidationStatus,
     SessionEventType,
+    WebhookProcessingStatus,
 )
 
 __all__ = [
@@ -93,4 +94,5 @@ __all__ = [
     "SessionSignalInput",
     "ShopperIntent",
     "SoftCatalogueSignals",
+    "WebhookProcessingStatus",
 ]

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.layers.payments.webhook import PaymentSnapshot, VerifiedWebhookEnvelope
 
 
 class PaymentOrder(BaseModel):
@@ -17,13 +19,13 @@ class PaymentOrder(BaseModel):
     amount_minor: int
     currency: str
     key_id: str | None = None
-    raw: dict[str, Any] = Field(default_factory=dict)
+    raw: dict = Field(default_factory=dict)
 
 
 class PaymentProvider(Protocol):
     """create_order only after policy + revalidation PASS.
 
-    verify_webhook is M10. M9 must not treat client success as verified payment.
+    verify_webhook checks HMAC of the raw body. It does not mark payment VERIFIED.
     """
 
     name: str
@@ -40,6 +42,10 @@ class PaymentProvider(Protocol):
         """Create a payment order. Amount is integer minor units from server truth."""
         ...
 
-    def verify_webhook(self, *, payload: bytes, signature: str) -> dict[str, Any]:
-        """Verify provider signature and return a normalized payment event (M10)."""
+    def verify_webhook(self, *, payload: bytes, signature: str) -> VerifiedWebhookEnvelope:
+        """Verify raw-body HMAC and return a typed envelope. Parse JSON only after verify."""
+        ...
+
+    def fetch_payment(self, provider_payment_id: str) -> PaymentSnapshot:
+        """Optional independent fetch. Automated tests use the stub, never live Razorpay."""
         ...

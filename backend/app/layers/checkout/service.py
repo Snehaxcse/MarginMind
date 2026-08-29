@@ -349,6 +349,12 @@ def report_client_payment_result(
     attempt = get_checkout_attempt(db, checkout_ref_id)
     if attempt is None:
         raise CheckoutServiceError("unknown_checkout", f"Checkout {checkout_ref_id} was not found.")
+    if attempt.status == CheckoutAttemptStatus.VERIFIED.value:
+        raise CheckoutServiceError(
+            "checkout_not_reportable",
+            f"Checkout {attempt.ref_id} is already VERIFIED; client results cannot change it.",
+            checkout_attempt_ref=attempt.ref_id,
+        )
     if attempt.status not in _CLIENT_RESULT_FROM:
         raise CheckoutServiceError(
             "checkout_not_reportable",

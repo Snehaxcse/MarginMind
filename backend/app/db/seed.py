@@ -23,6 +23,7 @@ from app.models import (
 
 TRUNCATE_SQL = """
 TRUNCATE TABLE
+    webhook_events,
     payments,
     checkout_attempts,
     revalidation_results,

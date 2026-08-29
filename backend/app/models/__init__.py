@@ -23,6 +23,7 @@ from app.models.tables import (
     ProductVariant,
     SessionEvent,
     ShoppingSession,
+    WebhookEvent,
 )
 
 __all__ = [
@@ -48,4 +49,5 @@ __all__ = [
     "RevalidationResult",
     "SessionEvent",
     "ShoppingSession",
+    "WebhookEvent",
 ]

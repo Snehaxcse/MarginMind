@@ -1,23 +1,27 @@
 """Razorpay Test Mode provider. Uses HTTP, not the official SDK.
 
 The application layer must depend on PaymentProvider, not this module.
-Secrets come from the environment. They are never logged or returned.
+RAZORPAY_WEBHOOK_SECRET is distinct from RAZORPAY_KEY_SECRET.
+Secrets are never logged or returned.
 """
 
 from __future__ import annotations
 
-from typing import Any
+import json
 
 import httpx
 
 from app.layers.payments.base import PaymentOrder
 from app.layers.payments.errors import PaymentProviderError
+from app.layers.payments.signature import signatures_match
+from app.layers.payments.webhook import PaymentSnapshot, VerifiedWebhookEnvelope, parse_razorpay_event
 
 ORDERS_URL = "https://api.razorpay.com/v1/orders"
+PAYMENTS_URL = "https://api.razorpay.com/v1/payments"
 
 
 class RazorpayPaymentProvider:
-    """Live Test Mode orders. Webhook verification is M10."""
+    """Live Test Mode orders + raw-body webhook HMAC."""
 
     name = "razorpay"
 
@@ -26,6 +30,7 @@ class RazorpayPaymentProvider:
         *,
         key_id: str,
         key_secret: str,
+        webhook_secret: str = "",
         timeout: float = 15.0,
     ) -> None:
         if not key_id or not key_secret:
@@ -35,6 +40,7 @@ class RazorpayPaymentProvider:
             )
         self.key_id = key_id
         self._key_secret = key_secret
+        self._webhook_secret = webhook_secret
         self.timeout = timeout
 
     def create_order(
@@ -95,8 +101,48 @@ class RazorpayPaymentProvider:
             raw={"id": str(order_id), "receipt": body.get("receipt")},
         )
 
-    def verify_webhook(self, *, payload: bytes, signature: str) -> dict[str, Any]:
-        raise PaymentProviderError(
-            "not_implemented",
-            "Webhook/signature verification is M10.",
+    def verify_webhook(self, *, payload: bytes, signature: str) -> VerifiedWebhookEnvelope:
+        if not self._webhook_secret:
+            raise PaymentProviderError(
+                "not_configured",
+                "RAZORPAY_WEBHOOK_SECRET is required for webhook verification.",
+            )
+        if not signatures_match(secret=self._webhook_secret, body=payload, signature=signature):
+            raise PaymentProviderError("invalid_signature", "Webhook signature is invalid.")
+        try:
+            data = json.loads(payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise PaymentProviderError(
+                "invalid_payload",
+                "Webhook body is not JSON.",
+            ) from exc
+        if not isinstance(data, dict):
+            raise PaymentProviderError("invalid_payload", "Webhook JSON must be an object.")
+        return parse_razorpay_event(data, provider=self.name)
+
+    def fetch_payment(self, provider_payment_id: str) -> PaymentSnapshot:
+        try:
+            response = httpx.get(
+                f"{PAYMENTS_URL}/{provider_payment_id}",
+                auth=(self.key_id, self._key_secret),
+                timeout=self.timeout,
+            )
+        except httpx.HTTPError as exc:
+            raise PaymentProviderError(
+                "provider_failed",
+                "Razorpay payment fetch failed.",
+            ) from exc
+        if response.status_code >= 400:
+            raise PaymentProviderError(
+                "provider_failed",
+                f"Razorpay payment fetch was rejected (HTTP {response.status_code}).",
+            )
+        body = response.json()
+        return PaymentSnapshot(
+            provider=self.name,
+            provider_payment_id=str(body.get("id") or provider_payment_id),
+            provider_order_id=None if body.get("order_id") is None else str(body.get("order_id")),
+            amount_minor=int(body.get("amount") or 0),
+            currency=str(body.get("currency") or "INR"),
+            status=str(body.get("status") or ""),
         )

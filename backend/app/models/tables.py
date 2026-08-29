@@ -221,6 +221,7 @@ class ShoppingSession(Base):
         back_populates="session"
     )
     payments: Mapped[list["Payment"]] = relationship(back_populates="session")
+    webhook_events: Mapped[list["WebhookEvent"]] = relationship(back_populates="session")
 
 
 class SessionEvent(Base):
@@ -459,6 +460,7 @@ class CheckoutAttempt(Base):
     session: Mapped[ShoppingSession] = relationship(back_populates="checkout_attempts")
     basket: Mapped[Basket] = relationship()
     payments: Mapped[list["Payment"]] = relationship(back_populates="checkout_attempt")
+    webhook_events: Mapped[list["WebhookEvent"]] = relationship(back_populates="checkout_attempt")
 
 
 class Payment(Base):
@@ -472,7 +474,9 @@ class Payment(Base):
     )
     provider: Mapped[str] = mapped_column(String(32))
     provider_order_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
-    provider_payment_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    provider_payment_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
     amount_minor: Mapped[int] = mapped_column(Integer)
     currency: Mapped[str] = mapped_column(String(8), default="INR")
     status: Mapped[str] = mapped_column(String(32), index=True)
@@ -486,6 +490,43 @@ class Payment(Base):
 
     session: Mapped[ShoppingSession] = relationship(back_populates="payments")
     checkout_attempt: Mapped[CheckoutAttempt] = relationship(back_populates="payments")
+    webhook_events: Mapped[list["WebhookEvent"]] = relationship(back_populates="payment")
+
+
+class WebhookEvent(Base):
+    __tablename__ = "webhook_events"
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_event_id", name="uq_webhook_provider_event"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    ref_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    session_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("shopping_sessions.id"), nullable=True, index=True
+    )
+    checkout_attempt_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("checkout_attempts.id"), nullable=True, index=True
+    )
+    payment_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("payments.id"), nullable=True, index=True
+    )
+    provider: Mapped[str] = mapped_column(String(32), index=True)
+    provider_event_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    signature_valid: Mapped[bool] = mapped_column(Boolean, default=False)
+    raw_body_hash: Mapped[str] = mapped_column(String(64), index=True)
+    provider_order_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    provider_payment_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    processing_status: Mapped[str] = mapped_column(String(32), index=True)
+    failure_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    payload_meta: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    session: Mapped[ShoppingSession | None] = relationship(back_populates="webhook_events")
+    checkout_attempt: Mapped[CheckoutAttempt | None] = relationship(back_populates="webhook_events")
+    payment: Mapped[Payment | None] = relationship(back_populates="webhook_events")
 
 
 class AuditEvent(Base):

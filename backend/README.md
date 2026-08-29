@@ -2,21 +2,25 @@
 
 Single Python service. Package boundaries are the architecture; they are not separate deploys.
 
-## Milestone 9
+## Milestone 10
 
-Server-side Razorpay **Test Mode** order creation and a deterministic checkout state machine. A Razorpay order is created only after granted exact-version approval **and** M8 revalidation `PASS`. Amounts are integer paise from catalogue truth (₹2,447 → `244700`). Caller-supplied prices are rejected. Client “payment succeeded” is stored as `PAYMENT_REPORTED` / `VERIFICATION_PENDING` only — never `VERIFIED`. Webhook/signature verification is M10.
+Server-side Razorpay **webhook verification**. Client checkout success is never `VERIFIED`.
 
-`PAYMENT_PROVIDER=stub` (default) or `razorpay`. Keys: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`. Automated tests inject `StubPaymentProvider` and do not need credentials. Optional live Test Mode: `MARGINMIND_LIVE_RAZORPAY=1`.
+Verify `HMAC-SHA256(RAZORPAY_WEBHOOK_SECRET, raw request body bytes)` against `X-Razorpay-Signature` **before** parsing JSON. Use `hmac.compare_digest`. Do not reuse `RAZORPAY_KEY_SECRET` as the webhook secret.
+
+Idempotency: `x-razorpay-event-id` (unique with provider). Duplicate deliveries return 2xx and do not double-apply. SHA-256 of the raw body is stored on `webhook_events` (`WHK-…`); the full payload is not kept.
+
+`payment.captured` / `order.paid` may set Payment + CheckoutAttempt to `VERIFIED` only when `provider_order_id`, `amount_minor`, and `INR` match the CheckoutAttempt. `payment.authorized` is not verified. `VERIFIED` is never downgraded.
 
 HTTP:
 
 ```
-POST /api/v1/checkout     { session_ref_id, approval_ref_id }  # no amount
+POST /api/v1/webhooks/razorpay   raw body + X-Razorpay-Signature + x-razorpay-event-id
+POST /api/v1/checkout            { session_ref_id, approval_ref_id }
 GET  /api/v1/checkout/{CHK-…}
+POST /api/v1/checkout/{CHK-…}/client-result   # reported only, never VERIFIED
 GET  /health
 ```
-
-Idempotency key: `checkout:{session_ref}:{basket_ref}:v{version}:{approval_ref}`. Repeated requests reuse one provider order. Revalidation failure does not occupy the key. `FAILED` provider attempts are retried in place.
 
 ## Local setup
 
@@ -60,7 +64,7 @@ python -m app.db.seed
 
 | Path | Responsibility |
 | --- | --- |
-| `app/api/` | HTTP adapters (`POST/GET /api/v1/checkout`, `/health`) |
+| `app/api/` | HTTP adapters (`POST/GET /api/v1/checkout`, `POST /api/v1/webhooks/razorpay`, `/health`) |
 | `app/core/` | Config, reference IDs, orchestrator (later) |
 | `app/db/` | Engine, sessions, Alembic, seed |
 | `app/models/` | SQLAlchemy commercial-truth tables |

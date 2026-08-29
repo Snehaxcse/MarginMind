@@ -14,7 +14,7 @@ from app.layers.session import SessionServiceError
 
 app = FastAPI(
     title="MarginMind API",
-    version="0.9.0",
+    version="0.10.0",
     description="Policy-controlled AI merchant-growth decision engine.",
 )
 app.include_router(health.router)
