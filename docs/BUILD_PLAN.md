@@ -16,7 +16,7 @@ Each milestone below is **small, sequential, independently testable, and committ
 3. MVP live LLM is the **Google Gemini API (free tier)** behind `LLMProvider`. `StubLLMProvider` remains the deterministic fallback so a model outage or free-tier limit does not kill the pitch. **Do not integrate Gemini in M0 or M1.**
 4. Label eval results **synthetic / offline**. Never claim live revenue uplift.
 5. One commit per milestone (or a short stack of commits that still map cleanly to one milestone).
-6. Do not install dependencies before Milestone 1. Do not scaffold Next.js before Milestone 11.
+6. Do not install dependencies before Milestone 1. Do not scaffold Next.js before Milestone 12.
 
 ---
 
@@ -27,8 +27,8 @@ Each milestone below is **small, sequential, independently testable, and committ
 | 0 / start | **M0** | Architecture + empty modules |
 | Day 1 | **M1–M4** | Data, catalogue, stub intent, baskets |
 | Day 2 | **M5–M8** | Friction, GDE, policy, evidence |
-| Day 3 | **M9–M10** | Razorpay test order + webhook verification |
-| Day 4 | **M13–M14** | Razorpay + synthetic eval |
+| Day 3 | **M9–M11** | Razorpay test order + webhook verification + Agent Trace backend |
+| Day 4 | **M12–M14** | Customer Copilot UI + synthetic eval |
 | Day 5 | **M15** | Demo script, polish, deploy smoke |
 
 Buffer lives in Day 5. If something slips, **cut UI chrome before cutting Policy, Revalidation, Audit, or Eval**.
@@ -334,19 +334,17 @@ client may report → VERIFICATION_PENDING
 
 - Webhook verification + `webhook_events` + tests.
 
-Do not start M11 without approval.
-
 ---
 
 ## Later — Customer Copilot UI
 
-**Moved later.** Previously listed as M9.
+**Moved to proposed M12.** Previously listed as M9, then as proposed M11.
 
 **Goal:** Judges can play Scene 1–6 without calling curl.
 
-Approval, revalidation, and checkout-order APIs already exist. This milestone is the customer surface that calls them, including Checkout.js against the M9 payload (widget only; verification remains M10).
+Approval, revalidation, checkout-order, webhook, and Agent Trace APIs already exist. This milestone is the customer surface that calls them, including Checkout.js against the M9 payload (widget only; verification remains M10). Progress states can consume `GET /api/v1/sessions/{session_ref}/progress`.
 
-**Out of scope at that time:** Merchant UI. Colour/vibe/couple. Agent Trace.
+**Out of scope at that time:** Merchant UI. Colour/vibe/couple. Agent Trace page (merchant `GET .../trace` is already the data contract).
 
 ---
 
@@ -360,43 +358,64 @@ Approval, revalidation, and checkout-order APIs already exist. This milestone is
 - Opportunity detail: What / Why / Fix.
 - Policy studio: view/edit margin, max discount, stacking, approval flags (simple form).
 - Guardrail counters + audit list.
+- Agent Trace timeline UI over `GET /api/v1/sessions/{session_ref}/trace`.
 
 **Out of scope**
 
-- Full Agent Trace timeline (next). Experiments, campaign agent, demand-gap product.
+- Experiments, campaign agent, demand-gap product. Trace *data* is M11; this is the merchant page.
 
 ---
 
-## M11 — Evidence store, append-only audit, Agent Trace
+## M11 — Agent Trace + audit reconstruction backend
 
-**Moved later.** Previously listed as M8.
+**Status:** complete.
 
-**Goal:** The merchant can reconstruct a decision.
+**Goal:** Turn persisted session, evidence, friction, action, policy, approval, revalidation, checkout, payment, webhook, and audit records into one coherent Agent Trace. Prepare the data contract for later customer progress UI and merchant Agent Trace UI. Does not build frontend.
+
+```
+GET /api/v1/sessions/{session_ref}/trace      merchant / full
+GET /api/v1/sessions/{session_ref}/progress   customer-safe projection
+```
+
+`build_agent_trace(db, session_ref_id)` reconstructs from the database only. A session from an earlier process restart is still reconstructable. No Gemini. No payment-behavior change. No new commercial tables.
 
 **In scope**
 
-- `evidence` + `audit_events` writers used by the orchestrator end-to-end (M8 already writes revalidation/rescue evidence).
-- Trace query: ordered events for a session (intent, signals, friction, proposal, policy, approval, revalidation, replacement, payment), keyed by human-readable ids.
-- Guardrail counters derived from audit: hard-budget violations, invented SKU attempts, unauthorized offers, unapproved money actions (all should stay 0).
-- Session agent trace page (clickable timeline).
+- Typed `AgentTrace` / `CustomerProgress` schemas and closed `TraceEventType` / `TraceOutcome`.
+- Chronological timeline from persisted facts only (no fabricated `CATALOGUE_RETRIEVED`).
+- Structured WHAT / WHY / FIX; typed policy checks; exact-version approvals; revalidation; distinct checkout / client / webhook / payment stages.
+- Safe webhook metadata (no secret, no raw body).
+- Guardrail summary derived from executed commercial truth, not hard-coded zeros.
+- Deterministic final-outcome precedence (`PAYMENT_VERIFIED` wins over earlier client noise).
+- Stable secondary ordering when timestamps tie.
 
 **Out of scope**
 
-- New commercial engines.
+- Customer Copilot UI. Merchant Trace UI. Gemini. New autonomy. Campaigns. Table redesign.
 
 **Test**
 
-- Running M4–M8 path writes a trace with evidence ids (`EVD-…`) that resolve.
-- Audit table is insert-only in code (no update API).
-- Hero OOS session renders: approved v1 → inventory revalidation → OUT_OF_STOCK → FAILED → FIND_ALTERNATIVE → new approval required.
+- Hero fit: intent → friction → action → policy, evidence refs preserved.
+- Hero OOS: v1 approval does not cover v2; replacement + new approval.
+- Hero payment: `CLIENT_PAYMENT_REPORTED` ≠ `PAYMENT_VERIFIED`.
+- NO_UPSELL: action + `HARD_BUDGET_VIOLATION` reason, `hard_budget_violation_count = 0`.
+- Blocked GDE proposal: policy BLOCK, no execution.
+- Reconstruction after a new SQLAlchemy session.
+- Customer projection hides `margin_percent` and forgone revenue.
+
+**Commit**
+
+- Trace reconstruction service + HTTP GET + tests.
+
+Do not start M12 without approval.
 
 ---
 
-## M12 — Thin HTTP adapters
+## M12 — Thin HTTP adapters + Customer Copilot UI (proposed)
 
-**Goal:** The copilot and merchant UIs can call remaining M3–M8 flows without embedding SQLAlchemy.
+**Goal:** The copilot can call remaining M3–M8 flows without embedding SQLAlchemy, then judges can play Scene 1–6 in a UI.
 
-Checkout HTTP already exists from M9 (`POST/GET /api/v1/checkout`). This milestone adds session, message, signal, basket, approve, revalidate, and replacement routes. No webhook verification (M10). No Agent Trace page.
+Checkout HTTP already exists from M9. Trace HTTP exists from M11. This milestone adds session, message, signal, basket, approve, revalidate, and replacement routes as needed, plus the customer surface including Checkout.js against the M9 payload. Webhooks remain the source of `VERIFIED`.
 
 ---
 
@@ -468,7 +487,7 @@ Razorpay Test Mode **order creation** is M9. **Webhook/signature verification** 
 
 ## Proposed next milestone after approval
 
-**M11 — Customer Copilot UI.**
+**M12 — Customer Copilot UI.**
 
-Payment truth is complete (order create + webhook verify). Build the customer surface that calls M7–M10, including Checkout.js against the M9 payload. Webhooks remain the source of `VERIFIED`. Do not start M11 without approval. Do not treat the widget callback as paid.
+Payment truth and Agent Trace reconstruction are complete. Build the customer surface that calls M7–M11, including Checkout.js against the M9 payload and progress from `GET .../progress`. Webhooks remain the source of `VERIFIED`. Do not start M12 without approval. Do not treat the widget callback as paid.
 

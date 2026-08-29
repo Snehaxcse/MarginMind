@@ -22,6 +22,7 @@ from app.schemas.friction import (
 from app.schemas.intent import BudgetIntent, IntentExtractionResult, ShopperIntent
 from app.schemas.policy import PolicyCheckResult, PolicyDecision, PolicyValidationResult
 from app.schemas.revalidation import RescueDecision, RescueProposal, RevalidationResult
+from app.schemas.trace import AgentTrace, CustomerProgress, TimelineEvent
 from app.schemas.vocabulary import (
     ActionStatus,
     Actor,
@@ -45,10 +46,14 @@ from app.schemas.vocabulary import (
     RevalidationCheckName,
     RevalidationStatus,
     SessionEventType,
+    TraceAudience,
+    TraceEventType,
+    TraceOutcome,
     WebhookProcessingStatus,
 )
 
 __all__ = [
+    "AgentTrace",
     "ActionStatus",
     "Actor",
     "AddOnEvaluation",
@@ -64,6 +69,7 @@ __all__ = [
     "CheckoutAttemptView",
     "CheckoutPayload",
     "CheckoutState",
+    "CustomerProgress",
     "ClientPaymentResultRequest",
     "ConstraintKind",
     "CreateCheckoutRequest",
@@ -91,6 +97,10 @@ __all__ = [
     "RevalidationResult",
     "RevalidationStatus",
     "SessionEventType",
+    "TimelineEvent",
+    "TraceAudience",
+    "TraceEventType",
+    "TraceOutcome",
     "SessionSignalInput",
     "ShopperIntent",
     "SoftCatalogueSignals",

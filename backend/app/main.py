@@ -1,6 +1,6 @@
 """FastAPI application entrypoint.
 
-Thin HTTP adapters over deterministic services. M9 adds checkout only.
+Thin HTTP adapters over deterministic services. M11 adds read-only Agent Trace.
 """
 
 from fastapi import FastAPI, Request
@@ -14,7 +14,7 @@ from app.layers.session import SessionServiceError
 
 app = FastAPI(
     title="MarginMind API",
-    version="0.10.0",
+    version="0.11.0",
     description="Policy-controlled AI merchant-growth decision engine.",
 )
 app.include_router(health.router)

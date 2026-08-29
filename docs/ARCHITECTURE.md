@@ -1,7 +1,7 @@
 # MarginMind Architecture
 
-**Milestone:** 10 — Razorpay webhook verification + idempotent payment verification  
-**Status:** M0–M10 implemented. Client checkout success is not verified payment.  
+**Milestone:** 11 — Agent Trace + audit reconstruction backend  
+**Status:** M0–M11 implemented. Session history is reconstructable from persisted records. No Agent Trace UI yet.  
 **Authoritative product spec:** [MarginMind — Product & Build Specification.md](./MarginMind%20—%20Product%20%26%20Build%20Specification.md)
 
 This document describes a **5-day Buildathon architecture**. It optimises for a reliable live demo of the locked MVP, not for a production multi-service platform.
@@ -164,11 +164,13 @@ Proposed MVP routes:
 | POST | `/api/v1/sessions/{id}/messages` | Customer utterance → pipeline |
 | POST | `/api/v1/sessions/{id}/signals` | UI behavioural evidence |
 | GET | `/api/v1/sessions/{id}` | Session snapshot for UI |
+| GET | `/api/v1/sessions/{session_ref}/trace` | Merchant Agent Trace (M11, implemented) |
+| GET | `/api/v1/sessions/{session_ref}/progress` | Customer-safe progress projection (M11) |
 | POST | `/api/v1/baskets/{id}/approve` | Bind approval to basket version |
-| POST | `/api/v1/checkout/attempts` | Revalidate + create payment order |
+| POST | `/api/v1/checkout` | Revalidate + create payment order (M9) |
 | POST | `/api/v1/webhooks/razorpay` | Signature verify + idempotent capture |
 | GET | `/api/v1/merchant/opportunities` | Top growth opportunities |
-| GET | `/api/v1/merchant/sessions/{id}/trace` | Agent trace |
+| GET | `/api/v1/merchant/sessions/{id}/trace` | Alias reserved for later merchant UI |
 | GET/PUT | `/api/v1/merchant/policies` | Policy studio |
 | GET | `/api/v1/merchant/guardrails` | Safety counters |
 | GET | `/api/v1/merchant/audit` | Searchable audit |
@@ -369,7 +371,7 @@ Duplicate `x-razorpay-event-id` + same SHA-256 body hash → `DUPLICATE`, HTTP 2
 
 Amount `244700` vs webhook `200000` → `PAYMENT_AMOUNT_MISMATCH`, not `VERIFIED`. Currency must be `INR`. Unknown `provider_order_id` is not attached to another checkout.
 
-HTTP (thin): `POST /api/v1/checkout`, `GET /api/v1/checkout/{ref_id}`, `POST /api/v1/checkout/{ref_id}/client-result` (still cannot write `VERIFIED`), `POST /api/v1/webhooks/razorpay`. Business logic is in `layers.checkout` / `layers.payments`.
+HTTP (thin): `POST /api/v1/checkout`, `GET /api/v1/checkout/{ref_id}`, `POST /api/v1/checkout/{ref_id}/client-result` (still cannot write `VERIFIED`), `POST /api/v1/webhooks/razorpay`, `GET /api/v1/sessions/{session_ref}/trace`, `GET /api/v1/sessions/{session_ref}/progress`. Business logic is in `layers.checkout` / `layers.payments` / `layers.trace`.
 
 Invalid/missing signature: HTTP 4xx, webhook row `signature_valid=false`, no payment mutation. Internal errors: non-2xx so Razorpay may retry.
 
@@ -412,13 +414,33 @@ This is distinct from basket `CheckoutState`. Order creation (M9) stops at `ORDE
 
 Every consequential decision points at evidence IDs, not at “the model said so”.
 
-Evidence examples: customer utterance, signal counts, basket snapshot, inventory row, policy check object, revalidation result (`REVAL-…`), checkout attempt (`CHK-…`), webhook delivery (`WHK-…`). M8–M10 write these for later Agent Trace; the trace UI is not built yet.
+Evidence examples: customer utterance, signal counts, basket snapshot, inventory row, policy check object, revalidation result (`REVAL-…`), checkout attempt (`CHK-…`), webhook delivery (`WHK-…`).
 
 Audit events are **append-only**:
 
 `timestamp, actor, input_ref, decision, evidence_ids, policy_result, approval_ref, execution_result, verification_result`
 
-Merchant Agent Trace is a projection of these events for one session.
+### 6.9.1 Agent Trace reconstruction (M11)
+
+`build_agent_trace(db, session_ref_id)` in `app/layers/trace` is a **read-only** reconstruction. It does not execute actions, mutate baskets, or change payment state. A session remains reconstructable after process restart because the builder reads only persisted rows.
+
+**Sources (no new tables):** `shopping_sessions`, `session_events`, `intents`, `baskets`/`basket_items`, `friction_diagnoses`, `agent_actions`, `policy_decisions`, `approvals`, `revalidation_results`, `checkout_attempts`, `payments`, `webhook_events`, `evidence`, `audit_events`. Timeline items are emitted only when a matching row exists. Catalogue retrieval is not persisted by the message pipeline, so `CATALOGUE_RETRIEVED` is not fabricated.
+
+**Timeline ordering:** `timestamp` ascending, then a stable type rank, then `type`, then `ref_id`. Equal timestamps do not reorder between requests.
+
+**WHAT / WHY / FIX:** structured fields on friction and action events (`what` = friction type such as `FIT_UNCERTAINTY`, `why` = reason codes + evidence refs, `fix` = bounded action such as `GUIDE_CONFIDENCE`). Not a single prose blob.
+
+**Policy:** each decision exposes `PASS` / `BLOCK` / `APPROVAL_REQUIRED` plus typed checks (`HARD_BUDGET`, `INVENTORY`, `MARGIN`, …) with `status` and optional `reason_code`.
+
+**Approvals:** `APR-001` `covers` `BASK-001@v1` only. v1 grant never implies v2.
+
+**Payment stages stay distinct:** checkout status, client `PAYMENT_REPORTED`, server `VERIFICATION_PENDING` / `VERIFIED`, webhook `signature_valid`. Client success is never collapsed into verified payment. Webhook metadata omits secrets and raw bodies.
+
+**Guardrail summary** is derived from executed commercial state (granted baskets / provider orders), not from blocked proposals. `NO_UPSELL` because of `HARD_BUDGET_VIOLATION` does not increment `hard_budget_violation_count`.
+
+**Final outcome precedence (highest first):** `PAYMENT_VERIFIED` → `PAYMENT_FAILED` → `PAYMENT_PENDING_VERIFICATION` → `CHECKOUT_READY` → `PURCHASE_PLAN_REJECTED` → `STOPPED` → `IN_PROGRESS`. A later verified webhook wins over an earlier failed or unverified client callback.
+
+**Projections:** `GET /api/v1/sessions/{session_ref}/trace` is the merchant view (evidence, policy checks, refs, guardrails, `margin_percent`). `GET /api/v1/sessions/{session_ref}/progress` is customer-safe (no margin, no forgone revenue, no guardrail block). No Agent Trace UI in M11.
 
 ### 6.10 Synthetic evaluation (`eval/`)
 
@@ -589,6 +611,10 @@ M9 creates the order. M10 may write `VERIFIED` only from captured/paid provider 
 
 Signature-valid ≠ payment verified.
 
+### Agent Trace outcome
+
+`IN_PROGRESS` · `STOPPED` · `CHECKOUT_READY` · `PAYMENT_PENDING_VERIFICATION` · `PAYMENT_VERIFIED` · `PAYMENT_FAILED` · `PURCHASE_PLAN_REJECTED`
+
 These live in `backend/app/schemas/vocabulary.py` so frontend, engine, eval, and audit share one contract.
 
 ---
@@ -622,6 +648,7 @@ MarginMind/
         approval/            ← exact-version grant/reject; no execution
         revalidation/        ← M8 live re-check; approval ≠ success
         checkout/            ← M9 attempt; M10 webhook apply; client ≠ verified
+        trace/               ← M11 read-only Agent Trace reconstruction
         friction/
         evidence/
         payments/            ← PaymentProvider; Stub + Razorpay Test Mode
@@ -677,4 +704,4 @@ No extra services. No frontend pages in M0. No dependency install in M0.
 - No live/prod Razorpay keys in the repository
 - No refunds or subscriptions
 
-Next: [BUILD_PLAN.md](./BUILD_PLAN.md) — Customer Copilot UI (proposed M11). Do not start M11 without approval.
+Next: [BUILD_PLAN.md](./BUILD_PLAN.md) — Customer Copilot UI (proposed M12). Do not start M12 without approval.
